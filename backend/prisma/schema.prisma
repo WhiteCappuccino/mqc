@@ -96,6 +96,8 @@ model User {
   mediaItems             MediaItem[]
   qualityChecksInitiated QualityCheck[]          @relation("QualityCheckInitiator")
   decisions              ModerationDecision[]
+  falsePositiveMarkedViolations Violation[]   @relation("ViolationFalsePositiveMarker")
+  mediaRevisionsCreated  MediaRevision[]      @relation("MediaRevisionCreator")
   loginHistory           LoginHistory[]
   passwordResetTokens    PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
@@ -166,6 +168,7 @@ model MediaItem {
   title           String
   description     String?
   storageKey      String                 @unique
+  checksum        String
   fileName        String
   mimeType        String
   sizeBytes       Int
@@ -189,6 +192,9 @@ model MediaItem {
   favorites       Favorite[]
   collectionItems CollectionItem[]
   access          MediaAccess[]
+  revisions       MediaRevision[]
+
+  @@index([checksum])
 }
 
 model QualityCriterion {
@@ -209,6 +215,7 @@ model QualityCheck {
   initiatedById  String?
   initiatedBy    User?       @relation("QualityCheckInitiator", fields: [initiatedById], references: [id])
   status         CheckStatus @default(QUEUED)
+  mediaVersion   Int         @default(1)
   criteria       Json
   autoResult     Json
   manualResult   Json?
@@ -243,6 +250,11 @@ model Violation {
   type              String
   description       String
   severity          ViolationSeverity
+  isFalsePositive   Boolean            @default(false)
+  falsePositiveMarkedAt DateTime?
+  falsePositiveMarkedById String?
+  falsePositiveMarker User?            @relation("ViolationFalsePositiveMarker", fields: [falsePositiveMarkedById], references: [id], onDelete: SetNull)
+  mediaVersion      Int                @default(1)
   marker            String?
   coordinates       String?
   source            ViolationSource
@@ -256,6 +268,7 @@ model ModerationDecision {
   mediaItem      MediaItem         @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
   moderatorId    String
   moderator      User              @relation(fields: [moderatorId], references: [id])
+  mediaVersion   Int               @default(1)
   status         ModerationStatus
   qualityLevel   Int?
   comment        String?
@@ -324,6 +337,7 @@ model Comment {
   authorId       String
   author         User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
   text           String
+  mediaVersion   Int?
   mediaItemId    String?
   mediaItem      MediaItem?   @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
   qualityCheckId String?
@@ -369,4 +383,28 @@ model SystemSetting {
   updatedById String?
   updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt   DateTime @updatedAt
+}
+
+model MediaRevision {
+  id            String      @id @default(cuid())
+  mediaItemId   String
+  mediaItem     MediaItem   @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  version       Int
+  title         String
+  description   String?
+  storageKey    String
+  checksum      String
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  type          MediaType
+  status        MediaStatus
+  previewUrl    String?
+  categoryName  String?
+  tags          Json
+  createdById   String?
+  createdBy     User?       @relation("MediaRevisionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now())
+
+  @@index([mediaItemId, version])
 }

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { MediaStatus, Role } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { JwtPayload } from "../auth/jwt-payload.interface";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { UsersService } from "../users/users.service";
 import { ListAuditLogQueryDto } from "./dto/list-audit-log-query.dto";
@@ -17,6 +18,7 @@ export class AdminService {
   constructor(
     private readonly usersService: UsersService,
     private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -211,5 +213,38 @@ export class AdminService {
       roles: Object.values(Role),
     };
   }
-}
 
+  async deleteMedia(mediaId: string, actor: JwtPayload) {
+    const media = await this.prisma.mediaItem.findUnique({
+      where: { id: mediaId },
+      select: {
+        id: true,
+        title: true,
+        ownerId: true,
+      },
+    });
+    if (!media) throw new NotFoundException("Media not found");
+
+    await this.prisma.mediaItem.delete({
+      where: { id: mediaId },
+    });
+
+    await this.notificationsService.notify({
+      userId: media.ownerId,
+      type: "STATUS_CHANGED",
+      title: "Media was removed by administrator",
+      message: `Material "${media.title}" was deleted by administrator action.`,
+      alsoEmail: true,
+    });
+
+    await this.auditService.log({
+      actorId: actor.sub,
+      action: "ADMIN_DELETE_MEDIA",
+      entityType: "MEDIA",
+      entityId: media.id,
+      metadata: {},
+    });
+
+    return { ok: true };
+  }
+}

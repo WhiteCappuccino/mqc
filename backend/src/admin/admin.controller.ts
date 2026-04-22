@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -111,5 +112,13 @@ export class AdminController {
     @CurrentUser() actor: JwtPayload,
   ) {
     return this.adminService.updateMediaStatus(mediaId, dto, actor);
+  }
+
+  @Delete("media/:id")
+  deleteMedia(
+    @Param("id") mediaId: string,
+    @CurrentUser() actor: JwtPayload,
+  ) {
+    return this.adminService.deleteMedia(mediaId, actor);
   }
 }

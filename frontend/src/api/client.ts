@@ -84,7 +84,18 @@ export interface UploadMediaPayload {
   type?: MediaType;
   category?: string;
   tags?: string[];
-  file: File;
+  file?: File;
+  fileUrl?: string;
+}
+
+export interface UploadMediaVersionPayload {
+  title?: string;
+  description?: string;
+  type?: MediaType;
+  category?: string;
+  tags?: string[];
+  file?: File;
+  fileUrl?: string;
 }
 
 export const api = {
@@ -103,7 +114,7 @@ export const api = {
   },
 
   forgotPassword(email: string) {
-    return request<{ ok: true; resetToken?: string }>("/auth/forgot-password", {
+    return request<{ ok: true }>("/auth/forgot-password", {
       method: "POST",
       body: JSON.stringify({ email }),
     });
@@ -177,6 +188,24 @@ export const api = {
     return request<MediaItem>(`/media/${id}`, { method: "GET" }, token);
   },
 
+  getMediaAudit(id: string, token: string) {
+    return request<
+      {
+        id: string;
+        action: string;
+        entityType: string;
+        entityId?: string;
+        createdAt: string;
+        actor?: {
+          id: string;
+          email?: string;
+          username?: string;
+          fullName?: string;
+        } | null;
+      }[]
+    >(`/media/${id}/audit`, { method: "GET" }, token);
+  },
+
   uploadMedia(payload: UploadMediaPayload, token: string) {
     const formData = new FormData();
     formData.append("title", payload.title);
@@ -188,9 +217,26 @@ export const api = {
         formData.append("tags", tag);
       });
     }
-    formData.append("file", payload.file);
+    if (payload.fileUrl) formData.append("fileUrl", payload.fileUrl);
+    if (payload.file) formData.append("file", payload.file);
 
     return request<MediaItem>("/media", { method: "POST", body: formData }, token);
+  },
+
+  uploadMediaVersion(mediaId: string, payload: UploadMediaVersionPayload, token: string) {
+    const formData = new FormData();
+    if (payload.title) formData.append("title", payload.title);
+    if (payload.description) formData.append("description", payload.description);
+    if (payload.type) formData.append("type", payload.type);
+    if (payload.category) formData.append("category", payload.category);
+    if (payload.tags?.length) {
+      payload.tags.forEach((tag) => {
+        formData.append("tags", tag);
+      });
+    }
+    if (payload.fileUrl) formData.append("fileUrl", payload.fileUrl);
+    if (payload.file) formData.append("file", payload.file);
+    return request<MediaItem>(`/media/${mediaId}/version`, { method: "POST", body: formData }, token);
   },
 
   sendForCheck(id: string, token: string) {
@@ -211,6 +257,13 @@ export const api = {
 
   moderationViolations(token: string) {
     return request("/moderation/violations", { method: "GET" }, token);
+  },
+
+  markViolationFalsePositive(violationId: string, isFalsePositive: boolean, token: string) {
+    return request(`/moderation/violations/${violationId}/false-positive`, {
+      method: "PATCH",
+      body: JSON.stringify({ isFalsePositive }),
+    }, token);
   },
 
   addManualViolation(
@@ -454,5 +507,8 @@ export const api = {
       body: JSON.stringify(body),
     }, token);
   },
-};
 
+  adminDeleteMedia(mediaId: string, token: string) {
+    return request(`/admin/media/${mediaId}`, { method: "DELETE" }, token);
+  },
+};

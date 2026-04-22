@@ -1,4 +1,5 @@
 import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
 import { Role } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -10,6 +11,7 @@ describe("AuthService", () => {
   let usersService: jest.Mocked<UsersService>;
   let prisma: jest.Mocked<PrismaService>;
   let jwtService: jest.Mocked<JwtService>;
+  let configService: jest.Mocked<ConfigService>;
   let notificationsService: jest.Mocked<NotificationsService>;
   let auditService: jest.Mocked<AuditService>;
   let service: AuthService;
@@ -32,6 +34,10 @@ describe("AuthService", () => {
       sign: jest.fn().mockReturnValue("token"),
     } as unknown as jest.Mocked<JwtService>;
 
+    configService = {
+      get: jest.fn().mockImplementation((_key: string, fallback?: string) => fallback),
+    } as unknown as jest.Mocked<ConfigService>;
+
     notificationsService = {
       notify: jest.fn(),
     } as unknown as jest.Mocked<NotificationsService>;
@@ -44,6 +50,7 @@ describe("AuthService", () => {
       usersService,
       prisma,
       jwtService,
+      configService,
       notificationsService,
       auditService,
     );
@@ -77,7 +84,6 @@ describe("AuthService", () => {
     expect(response.accessToken).toBe("token");
     expect(response.email).toBe("user@example.com");
     expect(response.username).toBe("user1");
-    expect(response.verificationToken).toBeTruthy();
     expect(prisma.emailVerificationToken.create).toHaveBeenCalled();
     expect(jwtService.sign).toHaveBeenCalled();
   });

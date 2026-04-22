@@ -75,6 +75,9 @@ export function AdminPage() {
     status: "PUBLISHED" as MediaStatus,
     reason: "",
   });
+  const [deleteMediaId, setDeleteMediaId] = useState("");
+  const [reportDateFrom, setReportDateFrom] = useState("");
+  const [reportDateTo, setReportDateTo] = useState("");
 
   async function load() {
     if (!token) return;
@@ -111,7 +114,10 @@ export function AdminPage() {
     if (!token) return;
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/reports/media?format=${format}`, {
+      const params = new URLSearchParams({ format });
+      if (reportDateFrom) params.set("dateFrom", reportDateFrom);
+      if (reportDateTo) params.set("dateTo", reportDateTo);
+      const response = await fetch(`${API_BASE}/reports/media?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) {
@@ -126,6 +132,19 @@ export function AdminPage() {
       URL.revokeObjectURL(url);
     } catch (downloadError) {
       setError(downloadError instanceof Error ? downloadError.message : "Download failed");
+    }
+  }
+
+  async function deleteMedia() {
+    if (!token || !deleteMediaId.trim()) return;
+    setError(null);
+    try {
+      await api.adminDeleteMedia(deleteMediaId.trim(), token);
+      setDeleteMediaId("");
+      setSuccess("Media removed");
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Failed to delete media");
     }
   }
 
@@ -260,6 +279,24 @@ export function AdminPage() {
           <Typography variant="h6" sx={{ mb: 1 }}>
             Reports
           </Typography>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1 }}>
+            <TextField
+              size="small"
+              type="date"
+              label="Date from"
+              value={reportDateFrom}
+              onChange={(event) => setReportDateFrom(event.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+            <TextField
+              size="small"
+              type="date"
+              label="Date to"
+              value={reportDateTo}
+              onChange={(event) => setReportDateTo(event.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+          </Stack>
           <Stack direction="row" spacing={1}>
             <Button variant="contained" onClick={() => download("csv")}>
               CSV
@@ -293,6 +330,25 @@ export function AdminPage() {
           ) : (
             <Typography color="text.secondary">No analytics data</Typography>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Delete media
+          </Typography>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <TextField
+              size="small"
+              label="Media ID"
+              value={deleteMediaId}
+              onChange={(event) => setDeleteMediaId(event.target.value)}
+            />
+            <Button variant="contained" color="error" onClick={() => void deleteMedia()}>
+              Delete
+            </Button>
+          </Stack>
         </CardContent>
       </Card>
 
@@ -542,4 +598,3 @@ export function AdminPage() {
     </Stack>
   );
 }
-

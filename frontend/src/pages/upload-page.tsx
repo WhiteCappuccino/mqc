@@ -26,13 +26,14 @@ export function UploadPage() {
   const [type, setType] = useState<MediaType>("IMAGE");
   const [sendForCheck, setSendForCheck] = useState(true);
   const [file, setFile] = useState<File | null>(null);
+  const [fileUrl, setFileUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
     if (!token) return;
-    if (!file) {
-      setError("Choose file first");
+    if (!file && !fileUrl.trim()) {
+      setError("Choose file or provide URL");
       return;
     }
 
@@ -49,7 +50,8 @@ export function UploadPage() {
             .split(",")
             .map((tag) => tag.trim())
             .filter(Boolean),
-          file,
+          file: file ?? undefined,
+          fileUrl: fileUrl.trim() || undefined,
         },
         token,
       );
@@ -114,6 +116,11 @@ export function UploadPage() {
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
           </Button>
+          <TextField
+            label="Or file URL (http/https)"
+            value={fileUrl}
+            onChange={(event) => setFileUrl(event.target.value)}
+          />
           <TextField
             select
             label="After upload"

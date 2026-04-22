@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
-import type { MediaItem, MediaStatus, MediaType } from "../types/domain";
+import type { MediaItem, MediaStatus, MediaType, ViolationSeverity } from "../types/domain";
 
 const mediaTypes: Array<MediaType | ""> = ["", "IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"];
 const mediaStatuses: Array<MediaStatus | ""> = [
@@ -34,6 +34,7 @@ const mediaStatuses: Array<MediaStatus | ""> = [
   "PUBLISHED",
   "ARCHIVED",
 ];
+const severities: Array<ViolationSeverity | ""> = ["", "LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 export function DashboardPage() {
   const { token } = useAuth();
@@ -45,6 +46,10 @@ export function DashboardPage() {
   const [q, setQ] = useState("");
   const [type, setType] = useState<MediaType | "">("");
   const [status, setStatus] = useState<MediaStatus | "">("");
+  const [severity, setSeverity] = useState<ViolationSeverity | "">("");
+  const [authorId, setAuthorId] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState<"createdAt" | "quality" | "popularity" | "status">(
     "createdAt",
   );
@@ -59,6 +64,10 @@ export function DashboardPage() {
           q: q || undefined,
           type: type || undefined,
           status: status || undefined,
+          severity: severity || undefined,
+          authorId: authorId || undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
           sortBy,
         }),
         api.listFavorites(token),
@@ -162,6 +171,45 @@ export function DashboardPage() {
             ))}
           </Select>
         </FormControl>
+        <FormControl sx={{ minWidth: 200 }}>
+          <InputLabel id="severity-filter-label">Severity</InputLabel>
+          <Select
+            labelId="severity-filter-label"
+            label="Severity"
+            value={severity}
+            onChange={(event: SelectChangeEvent) =>
+              setSeverity(event.target.value as ViolationSeverity | "")
+            }
+          >
+            {severities.map((option) => (
+              <MenuItem key={option || "all"} value={option}>
+                {option || "ALL"}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <TextField
+          label="Author ID"
+          value={authorId}
+          onChange={(event) => setAuthorId(event.target.value)}
+          sx={{ minWidth: 160 }}
+        />
+        <TextField
+          label="Date from"
+          type="date"
+          value={dateFrom}
+          onChange={(event) => setDateFrom(event.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 170 }}
+        />
+        <TextField
+          label="Date to"
+          type="date"
+          value={dateTo}
+          onChange={(event) => setDateTo(event.target.value)}
+          slotProps={{ inputLabel: { shrink: true } }}
+          sx={{ minWidth: 170 }}
+        />
         <FormControl sx={{ minWidth: 180 }}>
           <InputLabel id="sort-by-label">Sort by</InputLabel>
           <Select

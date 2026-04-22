@@ -53,12 +53,16 @@ export interface Violation {
   marker?: string | null;
   coordinates?: string | null;
   source: "SYSTEM" | "MODERATOR";
+  mediaVersion?: number;
+  isFalsePositive?: boolean;
+  falsePositiveMarkedAt?: string | null;
   createdAt: string;
 }
 
 export interface QualityCheck {
   id: string;
   status: "QUEUED" | "RUNNING" | "COMPLETED" | "NEEDS_MANUAL_REVIEW";
+  mediaVersion?: number;
   autoScore: number;
   finalScore: number;
   falsePositive: number;
@@ -70,6 +74,7 @@ export interface QualityCheck {
 export interface ModerationDecisionEntry {
   id: string;
   status: "APPROVED" | "REJECTED" | "NEEDS_REVISION";
+  mediaVersion?: number;
   qualityLevel?: number | null;
   comment?: string;
   createdAt: string;
@@ -85,6 +90,7 @@ export interface MediaItem {
   mimeType: string;
   sizeBytes: number;
   previewUrl?: string | null;
+  version?: number;
   categoryId?: string | null;
   category?: { id: string; name: string } | null;
   tags?: { tag: { id: string; name: string } }[];
@@ -99,6 +105,14 @@ export interface MediaItem {
   decisions?: ModerationDecisionEntry[];
   comments?: CommentItem[];
   access?: { id: string; userId: string; level: AccessLevel; user?: UserSummary }[];
+  revisions?: {
+    id: string;
+    version: number;
+    title: string;
+    fileName: string;
+    status: MediaStatus;
+    createdAt: string;
+  }[];
   _count?: { favorites: number };
   publicUrl?: string;
 }
@@ -107,6 +121,7 @@ export interface CommentItem {
   id: string;
   text: string;
   isResolved: boolean;
+  mediaVersion?: number | null;
   createdAt: string;
   authorId: string;
   author?: UserSummary;

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Role } from "@prisma/client";
 import type { JwtPayload } from "../auth/jwt-payload.interface";
@@ -50,5 +50,18 @@ export class ModerationController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.moderationService.addManualViolation(mediaId, body, user);
+  }
+
+  @Patch("violations/:violationId/false-positive")
+  markFalsePositive(
+    @Param("violationId") violationId: string,
+    @Body() body: { isFalsePositive: boolean },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.moderationService.markViolationFalsePositive(
+      violationId,
+      body.isFalsePositive,
+      user,
+    );
   }
 }

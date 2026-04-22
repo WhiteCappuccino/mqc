@@ -21,7 +21,7 @@ export class AnalyticsService {
       MediaStatus.ARCHIVED,
     ];
 
-    const [checkedCount, rejectedCount, byType, topViolations, authorRows, checks] =
+    const [checkedCount, rejectedCount, byType, topViolations, authorRows, checks, decisions, violationCounters] =
       await Promise.all([
         this.prisma.mediaItem.count({
           where: {
@@ -71,33 +71,58 @@ export class AnalyticsService {
         this.prisma.qualityCheck.findMany({
           where: periodFilter ? { createdAt: periodFilter } : {},
           include: {
-            mediaItem: {
-              select: {
-                createdAt: true,
-              },
-            },
-            violations: { select: { id: true } },
+            mediaItem: { select: { createdAt: true } },
           },
           take: 5000,
           orderBy: { createdAt: "desc" },
         }),
+        this.prisma.moderationDecision.findMany({
+          where: periodFilter ? { createdAt: periodFilter } : {},
+          select: {
+            mediaItemId: true,
+            mediaVersion: true,
+            createdAt: true,
+          },
+          take: 5000,
+          orderBy: { createdAt: "desc" },
+        }),
+        Promise.all([
+          this.prisma.violation.count({
+            where: periodFilter ? { createdAt: periodFilter } : {},
+          }),
+          this.prisma.violation.count({
+            where: periodFilter
+              ? { createdAt: periodFilter, isFalsePositive: true }
+              : { isFalsePositive: true },
+          }),
+        ]),
       ]);
 
-    const moderationDurationsMinutes = checks
-      .filter((check) => check.finishedAt)
-      .map((check) => {
-        const from = check.mediaItem.createdAt.getTime();
-        const to = (check.finishedAt ?? check.createdAt).getTime();
-        return Math.max(0, (to - from) / (1000 * 60));
-      });
+    const checkByMediaVersion = new Map<string, Date>();
+    for (const check of checks) {
+      const key = `${check.mediaItemId}:${check.mediaVersion}`;
+      const checkFinishedAt = check.finishedAt ?? check.createdAt;
+      const existing = checkByMediaVersion.get(key);
+      if (!existing || checkFinishedAt > existing) {
+        checkByMediaVersion.set(key, checkFinishedAt);
+      }
+    }
+
+    const moderationDurationsMinutes = decisions
+      .map((decision) => {
+        const key = `${decision.mediaItemId}:${decision.mediaVersion}`;
+        const checkFinishedAt = checkByMediaVersion.get(key);
+        if (!checkFinishedAt) return null;
+        return Math.max(0, (decision.createdAt.getTime() - checkFinishedAt.getTime()) / (1000 * 60));
+      })
+      .filter((duration): duration is number => duration !== null);
 
     const avgModerationMinutes = moderationDurationsMinutes.length
       ? moderationDurationsMinutes.reduce((sum, value) => sum + value, 0) /
         moderationDurationsMinutes.length
       : 0;
 
-    const totalViolations = checks.reduce((sum, check) => sum + check.violations.length, 0);
-    const totalFalsePositives = checks.reduce((sum, check) => sum + check.falsePositive, 0);
+    const [totalViolations, totalFalsePositives] = violationCounters;
     const falsePositiveRate = totalViolations
       ? Number((totalFalsePositives / totalViolations).toFixed(4))
       : 0;
@@ -136,4 +161,3 @@ export class AnalyticsService {
     };
   }
 }
-

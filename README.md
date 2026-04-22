@@ -1,8 +1,13 @@
-# Media Quality Control System
+# Media Quality Control Platform
 
-Diploma project implementation for automated media quality control and moderation.
+Платформа для автоматизированного контроля качества медиаконтента:
+- загрузка и хранение материалов
+- автоматические проверки качества
+- ручная модерация
+- совместная работа через комментарии и доступы
+- аналитика, аудит и отчеты
 
-## Stack
+## Технологический стек
 
 - Frontend: React + TypeScript + Vite + MUI
 - Backend: NestJS + Prisma + PostgreSQL + JWT + RBAC + MinIO
@@ -10,49 +15,75 @@ Diploma project implementation for automated media quality control and moderatio
 - Reports: CSV / XLSX / PDF
 - Deployment: Docker Compose
 
-## Architecture
+## Структура проекта
 
-- `frontend`: user UI (auth, media upload, dashboard, moderation, admin report downloads)
-- `backend`: core domain API and orchestration (auth, media, moderation, reports)
-- `analyzer`: automatic media check service with deterministic rule-based scoring
-- `postgres`: relational data
-- `minio`: object storage for uploaded media
+- `frontend` — пользовательский интерфейс
+- `backend` — API и бизнес-логика
+- `analyzer` — сервис автоматической проверки контента
+- `docs` — дополнительная документация
 
-## Quick Start (Docker)
+## Требования
+
+- Docker + Docker Compose
+- Node.js 20+ и npm (для локальной разработки без Docker)
+- Python 3.11+ (для локального analyzer)
+
+## Быстрый запуск через Docker
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-Available services:
-
+Сервисы:
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:3000/api`
 - Swagger: `http://localhost:3000/docs`
-- Analyzer: `http://localhost:8000/health`
+- Analyzer health: `http://localhost:8000/health`
 - MinIO API: `http://localhost:9000`
-- MinIO Console: `http://localhost:9001` (`minioadmin` / `minioadmin`)
-- PostgreSQL host port: `localhost:5433`
+- MinIO Console: `http://localhost:9001`
+- PostgreSQL: `localhost:5433`
 
-Default seeded admin:
+После первого запуска примените схему БД и сиды:
 
-- `admin@example.com`
-- `Admin123!`
+```bash
+cd backend
+npm run prisma:generate
+npm run prisma:push -- --force-reset
+npm run prisma:seed
+```
 
-## Local Development
+## Локальная разработка (без docker backend/frontend)
 
-### Backend
+### 1) Инфраструктура
+
+```bash
+docker compose up -d postgres minio analyzer
+```
+
+### 2) Backend
 
 ```bash
 cd backend
 cp .env.example .env
+```
+
+Для запуска с хоста Linux/macOS укажите в `.env`:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5433/media_quality?schema=public
+```
+
+Затем:
+
+```bash
 npm install
 npm run prisma:generate
 npm run prisma:push
+npm run prisma:seed
 npm run start:dev
 ```
 
-### Frontend
+### 3) Frontend
 
 ```bash
 cd frontend
@@ -61,7 +92,7 @@ npm install
 npm run dev
 ```
 
-### Analyzer
+### 4) Analyzer (локально)
 
 ```bash
 cd analyzer
@@ -71,13 +102,30 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-## Tests
+## SMTP (email-уведомления)
+
+Чтобы работали реальные письма (верификация, reset password, уведомления), заполните в `backend/.env`:
+
+```env
+FRONTEND_URL=http://localhost:5173
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=no-reply@media-quality.local
+SMTP_SECURE=false
+```
+
+Если SMTP не заполнен, уведомления будут сохраняться только внутри системы.
+
+## Тесты и сборка
 
 ### Backend
 
 ```bash
 cd backend
-npm test
+npm run build
+npm test -- --runInBand
 npm run test:e2e
 ```
 
@@ -85,6 +133,7 @@ npm run test:e2e
 
 ```bash
 cd frontend
+npm run build
 npm test
 ```
 
@@ -96,16 +145,65 @@ cd analyzer
 pytest -q
 ```
 
-## Core Workflows
+## Использование платформы
 
-1. User registers/logs in.
-2. User uploads media and metadata.
-3. User triggers automatic analysis.
-4. System stores analysis score and violations.
-5. Moderator reviews queue and submits final decision.
-6. Admin exports reports in CSV/XLSX/PDF.
+## 1. Гость
 
-## Documentation
+- Открыть главную страницу `/`
+- Зарегистрироваться `/register`
+- Войти `/login`
+- Восстановить пароль `/forgot-password`
+- Подтвердить email `/verify-email`
 
-- API details: `docs/api.md`
-- Testing notes: `docs/testing.md`
+## 2. Пользователь
+
+- `Dashboard` (`/dashboard`):
+  - просмотр своих и доступных материалов
+  - поиск и фильтры (тип, статус, критичность, автор, дата)
+  - сортировки (дата, качество, популярность, статус)
+- `Upload` (`/upload`):
+  - загрузка файла или по URL
+  - задание метаданных (название, описание, тип, теги, категория)
+  - отправка на автопроверку
+- `Media Details` (`/media/:id`):
+  - запуск автопроверки
+  - история проверок и нарушений
+  - добавление комментариев к материалу и к дефекту
+  - управление доступами
+  - загрузка новой версии материала
+  - просмотр истории версий и аудит-лога
+- `Favorites` (`/favorites`)
+- `Collections` (`/collections`)
+- `Notifications` (`/notifications`)
+- `Profile` (`/profile`)
+
+## 3. Модератор
+
+- `Moderation` (`/moderation`):
+  - очередь модерации
+  - финальное решение: `APPROVED` / `REJECTED` / `NEEDS_REVISION`
+  - ручное добавление нарушений
+  - пометка нарушений как false positive
+
+## 4. Администратор
+
+- `Admin` (`/admin`):
+  - управление пользователями, ролями, статусами
+  - управление критериями проверки
+  - управление словарем нарушений
+  - управление системными настройками
+  - просмотр журнала аудита
+  - изменение статусов материалов
+  - удаление материалов
+  - аналитика
+  - выгрузка отчетов CSV/XLSX/PDF, в том числе за период
+
+## Дефолтный администратор
+
+- Email: `admin@example.com`
+- Password: `Admin123!`
+
+## Полезные ссылки
+
+- API: `http://localhost:3000/docs`
+- Доп. документация: [docs/api.md](docs/api.md), [docs/testing.md](docs/testing.md)

@@ -34,6 +34,10 @@ export class CommentsService {
   async create(dto: CreateCommentDto, user: JwtPayload) {
     const targetMediaId = await this.resolveTargetMediaId(dto);
     await this.assertCanReadMedia(targetMediaId, user);
+    const targetMedia = await this.prisma.mediaItem.findUnique({
+      where: { id: targetMediaId },
+      select: { version: true },
+    });
 
     if (dto.parentId) {
       const parent = await this.prisma.comment.findUnique({
@@ -46,6 +50,7 @@ export class CommentsService {
       data: {
         authorId: user.sub,
         text: dto.text,
+        mediaVersion: targetMedia?.version,
         mediaItemId: dto.mediaItemId,
         qualityCheckId: dto.qualityCheckId,
         violationId: dto.violationId,
@@ -217,4 +222,3 @@ export class CommentsService {
     throw new ForbiddenException("Cannot resolve this comment");
   }
 }
-

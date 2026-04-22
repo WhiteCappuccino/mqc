@@ -9,6 +9,7 @@ import { CollectionsModule } from "./collections/collections.module";
 import { CommentsModule } from "./comments/comments.module";
 import { FavoritesModule } from "./favorites/favorites.module";
 import { HealthModule } from "./health/health.module";
+import { MailModule } from "./mail/mail.module";
 import { MediaModule } from "./media/media.module";
 import { ModerationModule } from "./moderation/moderation.module";
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -25,6 +26,7 @@ import { UsersModule } from "./users/users.module";
       envFilePath: [".env"],
     }),
     PrismaModule,
+    MailModule,
     AuditModule,
     NotificationsModule,
     StorageModule,

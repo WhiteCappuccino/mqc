@@ -25,6 +25,9 @@ export function MediaDetailsPage() {
   const { token } = useAuth();
   const [item, setItem] = useState<MediaItem | null>(null);
   const [comments, setComments] = useState<CommentItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<
+    { id: string; action: string; createdAt: string; actor?: { username?: string; fullName?: string } | null }[]
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -34,20 +37,24 @@ export function MediaDetailsPage() {
   const [shareLevel, setShareLevel] = useState<AccessLevel>("VIEW");
   const [manualViolationType, setManualViolationType] = useState("");
   const [manualViolationDescription, setManualViolationDescription] = useState("");
-  const [manualViolationSeverity, setManualViolationSeverity] =
-    useState<ViolationSeverity>("MEDIUM");
+  const [manualViolationSeverity, setManualViolationSeverity] = useState<ViolationSeverity>("MEDIUM");
+  const [versionFile, setVersionFile] = useState<File | null>(null);
+  const [versionFileUrl, setVersionFileUrl] = useState("");
+  const [violationCommentText, setViolationCommentText] = useState<Record<string, string>>({});
 
   async function reload() {
     if (!token || !id) return;
     setLoading(true);
     setError(null);
     try {
-      const [media, mediaComments] = await Promise.all([
+      const [media, mediaComments, logs] = await Promise.all([
         api.getMedia(id, token),
         api.listCommentsByMedia(id, token),
+        api.getMediaAudit(id, token),
       ]);
       setItem(media);
       setComments(mediaComments);
+      setAuditLogs(logs as typeof auditLogs);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Load failed");
     } finally {
@@ -157,6 +164,48 @@ export function MediaDetailsPage() {
     }
   }
 
+  async function addViolationComment(violationId: string) {
+    if (!token || !violationCommentText[violationId]?.trim()) return;
+    setError(null);
+    try {
+      await api.createComment(
+        {
+          text: violationCommentText[violationId].trim(),
+          violationId,
+        },
+        token,
+      );
+      setViolationCommentText((prev) => ({ ...prev, [violationId]: "" }));
+      await reload();
+    } catch (commentError) {
+      setError(commentError instanceof Error ? commentError.message : "Failed to add violation comment");
+    }
+  }
+
+  async function uploadVersion() {
+    if (!token || !id) return;
+    if (!versionFile && !versionFileUrl.trim()) {
+      setError("Choose new file or provide URL for new version");
+      return;
+    }
+    setError(null);
+    try {
+      await api.uploadMediaVersion(
+        id,
+        {
+          file: versionFile ?? undefined,
+          fileUrl: versionFileUrl.trim() || undefined,
+        },
+        token,
+      );
+      setVersionFile(null);
+      setVersionFileUrl("");
+      await reload();
+    } catch (versionError) {
+      setError(versionError instanceof Error ? versionError.message : "Failed to upload new version");
+    }
+  }
+
   if (loading) {
     return (
       <Stack sx={{ alignItems: "center", mt: 4 }}>
@@ -179,6 +228,7 @@ export function MediaDetailsPage() {
           <Typography color="text.secondary" sx={{ mt: 1 }}>
             Author: {item.owner?.fullName ?? item.owner?.username ?? item.ownerId}
           </Typography>
+          <Typography color="text.secondary">Version: {item.version ?? 1}</Typography>
           <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
             <Chip label={item.type} />
             <Chip label={item.status} color="primary" />
@@ -194,8 +244,29 @@ export function MediaDetailsPage() {
               </Button>
             )}
           </Stack>
+          <Stack spacing={1} sx={{ mt: 2 }}>
+            <Typography variant="subtitle2">Upload new version</Typography>
+            <Button component="label" variant="outlined">
+              {versionFile ? `Selected: ${versionFile.name}` : "Choose file for next version"}
+              <input
+                hidden
+                type="file"
+                onChange={(event) => setVersionFile(event.target.files?.[0] ?? null)}
+              />
+            </Button>
+            <TextField
+              size="small"
+              label="Or file URL (http/https)"
+              value={versionFileUrl}
+              onChange={(event) => setVersionFileUrl(event.target.value)}
+            />
+            <Button variant="outlined" onClick={uploadVersion}>
+              Upload new version
+            </Button>
+          </Stack>
         </CardContent>
       </Card>
+
       <Card sx={{ borderRadius: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
@@ -205,8 +276,8 @@ export function MediaDetailsPage() {
             {item.qualityChecks?.length ? (
               item.qualityChecks.map((analysis) => (
                 <Typography key={analysis.id} variant="body2">
-                  {new Date(analysis.createdAt).toLocaleString()} | status={analysis.status} |
-                  finalScore={analysis.finalScore}
+                  v{analysis.mediaVersion ?? item.version ?? 1} | {new Date(analysis.createdAt).toLocaleString()} |
+                  status={analysis.status} | finalScore={analysis.finalScore}
                 </Typography>
               ))
             ) : (
@@ -215,17 +286,41 @@ export function MediaDetailsPage() {
           </Stack>
         </CardContent>
       </Card>
+
       <Card sx={{ borderRadius: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Violations
+            Violation history
           </Typography>
           <Stack spacing={1}>
             {item.violations?.length ? (
               item.violations.map((violation) => (
-                <Typography key={violation.id} variant="body2">
-                  {violation.severity} | {violation.type} | {violation.description}
-                </Typography>
+                <Stack
+                  key={violation.id}
+                  spacing={1}
+                  sx={{ border: "1px solid #e5e7eb", p: 1, borderRadius: 1 }}
+                >
+                  <Typography variant="body2">
+                    v{violation.mediaVersion ?? item.version ?? 1} | {violation.severity} |{" "}
+                    {violation.type} | {violation.description}
+                    {violation.isFalsePositive ? " | false positive" : ""}
+                  </Typography>
+                  <Stack direction="row" spacing={1}>
+                    <TextField
+                      size="small"
+                      label="Comment for violation"
+                      value={violationCommentText[violation.id] ?? ""}
+                      onChange={(event) =>
+                        setViolationCommentText((prev) => ({
+                          ...prev,
+                          [violation.id]: event.target.value,
+                        }))
+                      }
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Button onClick={() => addViolationComment(violation.id)}>Comment</Button>
+                  </Stack>
+                </Stack>
               ))
             ) : (
               <Typography color="text.secondary">No violations</Typography>
@@ -264,6 +359,7 @@ export function MediaDetailsPage() {
           </Stack>
         </CardContent>
       </Card>
+
       <Card sx={{ borderRadius: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
@@ -307,6 +403,43 @@ export function MediaDetailsPage() {
           </Stack>
         </CardContent>
       </Card>
+
+      <Card sx={{ borderRadius: 3 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Version history
+          </Typography>
+          <Stack spacing={1}>
+            {(item.revisions ?? []).map((revision) => (
+              <Typography key={revision.id} variant="body2">
+                Version {revision.version} | {revision.fileName} | {revision.status} |{" "}
+                {new Date(revision.createdAt).toLocaleString()}
+              </Typography>
+            ))}
+            {!(item.revisions ?? []).length && (
+              <Typography color="text.secondary">No previous versions</Typography>
+            )}
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card sx={{ borderRadius: 3 }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Audit log
+          </Typography>
+          <Stack spacing={1}>
+            {auditLogs.map((log) => (
+              <Typography key={log.id} variant="body2">
+                {new Date(log.createdAt).toLocaleString()} | {log.action} |{" "}
+                {log.actor?.fullName ?? log.actor?.username ?? "system"}
+              </Typography>
+            ))}
+            {!auditLogs.length && <Typography color="text.secondary">No audit entries</Typography>}
+          </Stack>
+        </CardContent>
+      </Card>
+
       <Card sx={{ borderRadius: 3 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
@@ -331,7 +464,7 @@ export function MediaDetailsPage() {
                   <Stack spacing={1}>
                     {(comment.replies ?? []).map((reply) => (
                       <Typography key={reply.id} variant="body2" color="text.secondary">
-                        ↳ {reply.text} ({reply.author?.username ?? reply.authorId})
+                        {"->"} {reply.text} ({reply.author?.username ?? reply.authorId})
                       </Typography>
                     ))}
                     <Stack direction="row" spacing={1}>

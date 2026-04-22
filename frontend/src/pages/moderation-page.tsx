@@ -18,7 +18,14 @@ export function ModerationPage() {
   const { token } = useAuth();
   const [queue, setQueue] = useState<MediaItem[]>([]);
   const [violationHistory, setViolationHistory] = useState<
-    { id: string; type: string; severity: string; createdAt: string }[]
+    {
+      id: string;
+      type: string;
+      severity: string;
+      isFalsePositive?: boolean;
+      createdAt: string;
+      mediaItem?: { id: string; title: string };
+    }[]
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +42,16 @@ export function ModerationPage() {
         api.moderationViolations(token),
       ]);
       setQueue(queueData);
-      setViolationHistory(historyData as { id: string; type: string; severity: string; createdAt: string }[]);
+      setViolationHistory(
+        historyData as {
+          id: string;
+          type: string;
+          severity: string;
+          isFalsePositive?: boolean;
+          createdAt: string;
+          mediaItem?: { id: string; title: string };
+        }[],
+      );
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load");
     } finally {
@@ -68,6 +84,17 @@ export function ModerationPage() {
       setError(
         decisionError instanceof Error ? decisionError.message : "Decision failed",
       );
+    }
+  }
+
+  async function toggleFalsePositive(violationId: string, currentValue: boolean | undefined) {
+    if (!token) return;
+    setError(null);
+    try {
+      await api.markViolationFalsePositive(violationId, !currentValue, token);
+      await load();
+    } catch (flagError) {
+      setError(flagError instanceof Error ? flagError.message : "Failed to update false-positive flag");
     }
   }
 
@@ -138,9 +165,20 @@ export function ModerationPage() {
           </Typography>
           <Stack spacing={1}>
             {violationHistory.map((entry) => (
-              <Typography key={entry.id} variant="body2">
-                {entry.severity} | {entry.type} | {new Date(entry.createdAt).toLocaleString()}
-              </Typography>
+              <Stack key={entry.id} direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                  {entry.severity} | {entry.type} | {entry.mediaItem?.title ?? "n/a"} |{" "}
+                  {new Date(entry.createdAt).toLocaleString()}
+                  {entry.isFalsePositive ? " | false positive" : ""}
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => toggleFalsePositive(entry.id, entry.isFalsePositive)}
+                >
+                  {entry.isFalsePositive ? "Unmark FP" : "Mark FP"}
+                </Button>
+              </Stack>
             ))}
             {!violationHistory.length && (
               <Typography color="text.secondary">No violations recorded</Typography>

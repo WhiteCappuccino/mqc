@@ -8,14 +8,20 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 
 export function VerifyEmailPage() {
+  const [searchParams] = useSearchParams();
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    const urlToken = searchParams.get("token");
+    if (urlToken) setToken(urlToken);
+  }, [searchParams]);
 
   async function submit() {
     setError(null);
@@ -44,7 +50,7 @@ export function VerifyEmailPage() {
             Verify Email
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 3 }}>
-            Paste verification token
+            Enter token from verification email
           </Typography>
           <Stack spacing={2}>
             {error && <Alert severity="error">{error}</Alert>}
@@ -66,4 +72,3 @@ export function VerifyEmailPage() {
     </Box>
   );
 }
-

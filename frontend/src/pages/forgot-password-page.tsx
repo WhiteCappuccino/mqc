@@ -21,12 +21,8 @@ export function ForgotPasswordPage() {
     setError(null);
     setSuccess(null);
     try {
-      const result = await api.forgotPassword(email);
-      setSuccess(
-        result.resetToken
-          ? `Reset token (demo): ${result.resetToken}`
-          : "If account exists, reset instructions were generated.",
-      );
+      await api.forgotPassword(email);
+      setSuccess("If account exists, reset instructions were sent to email.");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Request failed");
     }
@@ -60,7 +56,7 @@ export function ForgotPasswordPage() {
               onChange={(event) => setEmail(event.target.value)}
             />
             <Button variant="contained" onClick={submit}>
-              Send reset token
+              Send reset instructions
             </Button>
             <Button component={Link} to="/reset-password">
               Already have token
@@ -74,4 +70,3 @@ export function ForgotPasswordPage() {
     </Box>
   );
 }
-

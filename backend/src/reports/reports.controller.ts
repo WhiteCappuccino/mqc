@@ -24,12 +24,22 @@ export class ReportsController {
 
   @Get("media")
   @ApiQuery({ name: "format", enum: ["csv", "xlsx", "pdf"], required: true })
-  async mediaReport(@Query("format") format: string, @Res() res: Response) {
+  @ApiQuery({ name: "dateFrom", required: false, type: String })
+  @ApiQuery({ name: "dateTo", required: false, type: String })
+  async mediaReport(
+    @Query("format") format: string,
+    @Query("dateFrom") dateFrom: string | undefined,
+    @Query("dateTo") dateTo: string | undefined,
+    @Res() res: Response,
+  ) {
     if (!["csv", "xlsx", "pdf"].includes(format)) {
       throw new BadRequestException("format must be csv, xlsx or pdf");
     }
     const typedFormat = format as ReportFormat;
-    const buffer = await this.reportsService.generateMediaReport(typedFormat);
+    const buffer = await this.reportsService.generateMediaReport(typedFormat, {
+      dateFrom,
+      dateTo,
+    });
 
     const contentTypeMap: Record<ReportFormat, string> = {
       csv: "text/csv",

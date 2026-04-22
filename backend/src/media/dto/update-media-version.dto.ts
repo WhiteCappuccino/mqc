@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { MediaType } from "@prisma/client";
 import {
   IsArray,
@@ -9,11 +9,12 @@ import {
   MaxLength,
 } from "class-validator";
 
-export class UploadMediaDto {
-  @ApiProperty()
+export class UpdateMediaVersionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @MaxLength(120)
-  title!: string;
+  title?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

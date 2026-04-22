@@ -10,8 +10,20 @@ export type ReportFormat = "csv" | "xlsx" | "pdf";
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async generateMediaReport(format: ReportFormat): Promise<Buffer> {
+  async generateMediaReport(
+    format: ReportFormat,
+    query?: { dateFrom?: string; dateTo?: string },
+  ): Promise<Buffer> {
+    const createdAt =
+      query?.dateFrom || query?.dateTo
+        ? {
+            gte: query.dateFrom ? new Date(query.dateFrom) : undefined,
+            lte: query.dateTo ? new Date(query.dateTo) : undefined,
+          }
+        : undefined;
+
     const items = await this.prisma.mediaItem.findMany({
+      where: { createdAt },
       include: {
         owner: true,
         qualityChecks: { take: 1, orderBy: { createdAt: "desc" } },

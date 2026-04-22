@@ -4,6 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import axios from "axios";
+import { createHash, randomUUID } from "crypto";
+import { basename } from "path";
 import {
   AccessLevel,
   CheckStatus,
@@ -14,7 +17,6 @@ import {
   ViolationSeverity,
   ViolationSource,
 } from "@prisma/client";
-import { randomUUID } from "crypto";
 import { JwtPayload } from "../auth/jwt-payload.interface";
 import { AuditService } from "../audit/audit.service";
 import {
@@ -25,6 +27,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { StorageService } from "../storage/storage.service";
 import { ListMediaQueryDto } from "./dto/list-media-query.dto";
+import { UpdateMediaVersionDto } from "./dto/update-media-version.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
 
 const SUPPORTED_EXTENSIONS: Record<MediaType, string[]> = {
@@ -34,6 +37,15 @@ const SUPPORTED_EXTENSIONS: Record<MediaType, string[]> = {
   TEXT: ["txt", "docx", "pdf"],
   MIXED: ["zip"],
 };
+
+const MAX_UPLOAD_SIZE = 100 * 1024 * 1024;
+
+interface ResolvedSource {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  buffer: Buffer;
+}
 
 @Injectable()
 export class MediaService {
@@ -45,40 +57,25 @@ export class MediaService {
     private readonly auditService: AuditService,
   ) {}
 
-  async upload(dto: UploadMediaDto, file: Express.Multer.File, user: JwtPayload) {
-    if (!file) {
-      throw new BadRequestException("File is required");
-    }
+  async upload(
+    dto: UploadMediaDto,
+    file: Express.Multer.File | undefined,
+    user: JwtPayload,
+  ) {
+    const source = await this.resolveUploadSource(dto, file);
+    const inferredType = dto.type ?? MediaService.inferMediaType(source.mimeType);
+    this.assertFileFormatAllowed(source.fileName, inferredType);
 
-    const inferredType = dto.type ?? MediaService.inferMediaType(file.mimetype);
-    this.assertFileFormatAllowed(file.originalname, inferredType);
-
-    const key = `${user.sub}/${randomUUID()}-${file.originalname}`;
+    const key = `${user.sub}/${randomUUID()}-${source.fileName}`;
     await this.storageService.uploadObject({
       key,
-      body: file.buffer,
-      mimeType: file.mimetype,
+      body: source.buffer,
+      mimeType: source.mimeType,
     });
 
-    const category = dto.category
-      ? await this.prisma.category.upsert({
-          where: { name: dto.category.trim() },
-          update: {},
-          create: { name: dto.category.trim() },
-        })
-      : null;
-
-    const tagRecords = dto.tags?.length
-      ? await Promise.all(
-          dto.tags.map((tag) =>
-            this.prisma.tag.upsert({
-              where: { name: tag.trim().toLowerCase() },
-              update: {},
-              create: { name: tag.trim().toLowerCase() },
-            }),
-          ),
-        )
-      : [];
+    const categoryId = await this.resolveCategoryId(dto.category);
+    const tagRecords = await this.resolveTags(dto.tags);
+    const checksum = createHash("sha256").update(source.buffer).digest("hex");
 
     const media = await this.prisma.mediaItem.create({
       data: {
@@ -87,16 +84,15 @@ export class MediaService {
         type: inferredType,
         ownerId: user.sub,
         status: MediaStatus.UPLOADED,
-        fileName: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
+        fileName: source.fileName,
+        mimeType: source.mimeType,
+        sizeBytes: source.sizeBytes,
         storageKey: key,
+        checksum,
         previewUrl: this.storageService.getPublicUrl(key),
-        categoryId: category?.id,
+        categoryId,
         tags: {
-          create: tagRecords.map((tag) => ({
-            tagId: tag.id,
-          })),
+          create: tagRecords.map((tag) => ({ tagId: tag.id })),
         },
       },
       include: {
@@ -110,10 +106,107 @@ export class MediaService {
       action: "UPLOAD_MEDIA",
       entityType: "MEDIA",
       entityId: media.id,
-      metadata: { title: media.title, type: media.type },
+      metadata: { title: media.title, type: media.type, checksum },
     });
 
     return media;
+  }
+
+  async uploadNewVersion(
+    mediaId: string,
+    dto: UpdateMediaVersionDto,
+    file: Express.Multer.File | undefined,
+    user: JwtPayload,
+  ) {
+    const media = await this.prisma.mediaItem.findUnique({
+      where: { id: mediaId },
+      include: {
+        tags: { include: { tag: true } },
+        category: true,
+      },
+    });
+    if (!media) throw new NotFoundException("Media not found");
+    await this.assertCanEditMedia(media.id, user);
+
+    const source = await this.resolveUploadSource(dto, file);
+    const inferredType = dto.type ?? MediaService.inferMediaType(source.mimeType);
+    this.assertFileFormatAllowed(source.fileName, inferredType);
+    const checksum = createHash("sha256").update(source.buffer).digest("hex");
+
+    const key = `${media.ownerId}/${randomUUID()}-${source.fileName}`;
+    await this.storageService.uploadObject({
+      key,
+      body: source.buffer,
+      mimeType: source.mimeType,
+    });
+
+    const categoryId = dto.category
+      ? await this.resolveCategoryId(dto.category)
+      : media.categoryId;
+
+    const tagRecords = dto.tags ? await this.resolveTags(dto.tags) : null;
+
+    const updatedMedia = await this.prisma.$transaction(async (transaction) => {
+      await transaction.mediaRevision.create({
+        data: {
+          mediaItemId: media.id,
+          version: media.version,
+          title: media.title,
+          description: media.description,
+          storageKey: media.storageKey,
+          checksum: media.checksum,
+          fileName: media.fileName,
+          mimeType: media.mimeType,
+          sizeBytes: media.sizeBytes,
+          type: media.type,
+          status: media.status,
+          previewUrl: media.previewUrl,
+          categoryName: media.category?.name ?? null,
+          tags: media.tags.map((entry) => entry.tag.name) as Prisma.InputJsonValue,
+          createdById: user.sub,
+        },
+      });
+
+      return transaction.mediaItem.update({
+        where: { id: media.id },
+        data: {
+          title: dto.title ?? media.title,
+          description: dto.description ?? media.description,
+          type: inferredType,
+          fileName: source.fileName,
+          mimeType: source.mimeType,
+          sizeBytes: source.sizeBytes,
+          storageKey: key,
+          checksum,
+          previewUrl: this.storageService.getPublicUrl(key),
+          categoryId,
+          status: MediaStatus.UPLOADED,
+          version: { increment: 1 },
+          tags: tagRecords ? {
+            deleteMany: {},
+            create: tagRecords.map((tag) => ({ tagId: tag.id })),
+          } : undefined,
+        },
+        include: {
+          tags: { include: { tag: true } },
+          category: true,
+        },
+      });
+    });
+
+    await this.auditService.log({
+      actorId: user.sub,
+      action: "UPLOAD_MEDIA_VERSION",
+      entityType: "MEDIA",
+      entityId: media.id,
+      metadata: {
+        previousVersion: media.version,
+        nextVersion: updatedMedia.version,
+        checksum,
+      },
+    });
+
+    return updatedMedia;
   }
 
   async list(user: JwtPayload, query: ListMediaQueryDto) {
@@ -134,7 +227,9 @@ export class MediaService {
     });
 
     if (query.sortBy === "quality") {
-      return media.sort((a, b) => (b.qualityChecks[0]?.finalScore ?? 0) - (a.qualityChecks[0]?.finalScore ?? 0));
+      return media.sort(
+        (a, b) => (b.qualityChecks[0]?.finalScore ?? 0) - (a.qualityChecks[0]?.finalScore ?? 0),
+      );
     }
     if (query.sortBy === "popularity") {
       return media.sort((a, b) => b._count.favorites - a._count.favorites);
@@ -166,6 +261,10 @@ export class MediaService {
             user: { select: { id: true, fullName: true, username: true, email: true } },
           },
         },
+        revisions: {
+          orderBy: { version: "desc" },
+          take: 20,
+        },
       },
     });
 
@@ -195,12 +294,22 @@ export class MediaService {
       data: { status: MediaStatus.IN_PROCESS },
     });
 
+    const duplicateCount = await this.prisma.mediaItem.count({
+      where: {
+        checksum: media.checksum,
+        id: { not: media.id },
+      },
+    });
+
     const result = await this.analyzerClient.analyze({
       mediaType: media.type,
       title: media.title,
       description: media.description ?? undefined,
       mimeType: media.mimeType,
       sizeBytes: media.sizeBytes,
+      fileName: media.fileName,
+      fileUrl: this.storageService.getPublicUrl(media.storageKey),
+      duplicateHint: duplicateCount > 0,
     });
 
     const finalStatus = this.mapRecommendationToStatus(result);
@@ -209,6 +318,7 @@ export class MediaService {
         mediaItemId: media.id,
         initiatedById: user.sub,
         status: CheckStatus.COMPLETED,
+        mediaVersion: media.version,
         criteria: criteria.map((criterion) => ({
           code: criterion.code,
           name: criterion.name,
@@ -221,11 +331,19 @@ export class MediaService {
       },
     });
 
-    await this.persistViolations(media.id, qualityCheck.id, result.violations);
+    await this.persistViolations(media.id, media.version, qualityCheck.id, result.violations);
 
     const updatedMedia = await this.prisma.mediaItem.update({
       where: { id: media.id },
       data: { status: finalStatus },
+    });
+
+    await this.notificationsService.notify({
+      userId: media.ownerId,
+      type: "AUTO_CHECK_FINISHED",
+      title: "Automatic check finished",
+      message: `Automatic check for "${media.title}" is completed. Score: ${result.score}.`,
+      alsoEmail: true,
     });
 
     await this.notificationsService.notifyMaterialOwnerStatusChanged(
@@ -235,10 +353,7 @@ export class MediaService {
     );
 
     if (finalStatus === MediaStatus.NEEDS_MANUAL_MODERATION) {
-      await this.notificationsService.notifyModeratorsAboutNewCheck(
-        media.id,
-        media.title,
-      );
+      await this.notificationsService.notifyModeratorsAboutNewCheck(media.id, media.title);
     }
 
     await this.auditService.log({
@@ -250,6 +365,7 @@ export class MediaService {
         score: result.score,
         violations: result.violations,
         status: updatedMedia.status,
+        duplicateHint: duplicateCount > 0,
       },
     });
 
@@ -333,6 +449,95 @@ export class MediaService {
     return { ok: true };
   }
 
+  async listAuditLogs(mediaId: string, user: JwtPayload) {
+    await this.assertCanReadMedia(mediaId, user);
+
+    return this.prisma.auditLog.findMany({
+      where: {
+        entityType: "MEDIA",
+        entityId: mediaId,
+      },
+      include: {
+        actor: {
+          select: { id: true, email: true, username: true, fullName: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    });
+  }
+
+  private async resolveUploadSource(
+    dto: { fileUrl?: string },
+    file: Express.Multer.File | undefined,
+  ): Promise<ResolvedSource> {
+    if (file) {
+      return {
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        buffer: file.buffer,
+      };
+    }
+    if (!dto.fileUrl) {
+      throw new BadRequestException("Either file or fileUrl is required");
+    }
+
+    let response;
+    try {
+      response = await axios.get<ArrayBuffer>(dto.fileUrl, {
+        responseType: "arraybuffer",
+        timeout: 20000,
+        maxBodyLength: MAX_UPLOAD_SIZE,
+        maxContentLength: MAX_UPLOAD_SIZE,
+      });
+    } catch {
+      throw new BadRequestException("Could not download file from provided URL");
+    }
+    const mimeType = response.headers["content-type"]?.split(";")[0]?.trim() || "application/octet-stream";
+    const urlPath = new URL(dto.fileUrl).pathname;
+    const decoded = decodeURIComponent(urlPath);
+    const candidate = basename(decoded);
+    const fileName = candidate || `remote-${randomUUID()}`;
+    const buffer = Buffer.from(response.data);
+    if (!buffer.length) {
+      throw new BadRequestException("Downloaded file is empty");
+    }
+
+    return {
+      fileName,
+      mimeType,
+      sizeBytes: buffer.length,
+      buffer,
+    };
+  }
+
+  private async resolveCategoryId(category?: string | null) {
+    if (!category?.trim()) return null;
+    const entity = await this.prisma.category.upsert({
+      where: { name: category.trim() },
+      update: {},
+      create: { name: category.trim() },
+    });
+    return entity.id;
+  }
+
+  private async resolveTags(tags?: string[] | null) {
+    if (!tags?.length) return [];
+    return Promise.all(
+      tags
+        .map((tag) => tag.trim().toLowerCase())
+        .filter(Boolean)
+        .map((tag) =>
+          this.prisma.tag.upsert({
+            where: { name: tag },
+            update: {},
+            create: { name: tag },
+          }),
+        ),
+    );
+  }
+
   private assertFileFormatAllowed(fileName: string, type: MediaType) {
     const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
     const allowed = SUPPORTED_EXTENSIONS[type] ?? [];
@@ -345,10 +550,7 @@ export class MediaService {
     const where: Prisma.MediaItemWhereInput = {};
 
     if (user.role === Role.USER) {
-      where.OR = [
-        { ownerId: user.sub },
-        { access: { some: { userId: user.sub } } },
-      ];
+      where.OR = [{ ownerId: user.sub }, { access: { some: { userId: user.sub } } }];
     }
 
     if (query.q) {
@@ -401,21 +603,25 @@ export class MediaService {
 
   private async persistViolations(
     mediaId: string,
+    mediaVersion: number,
     qualityCheckId: string,
     violationCodes: string[],
   ) {
-    for (const code of violationCodes) {
+    const dedupedCodes = [...new Set(violationCodes.map((code) => code.trim()).filter(Boolean))];
+    for (const code of dedupedCodes) {
+      const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
       const dictionary = await this.prisma.violationDictionary.findUnique({
-        where: { code: code.toUpperCase() },
+        where: { code: normalizedCode },
       });
       await this.prisma.violation.create({
         data: {
           mediaItemId: mediaId,
           qualityCheckId,
           dictionaryId: dictionary?.id,
-          type: code,
-          description: `Auto detected: ${code}`,
+          type: normalizedCode,
+          description: dictionary?.description ?? `Auto detected: ${normalizedCode}`,
           severity: dictionary?.defaultSeverity ?? ViolationSeverity.MEDIUM,
+          mediaVersion,
           source: ViolationSource.SYSTEM,
         },
       });
@@ -431,9 +637,7 @@ export class MediaService {
     });
     if (!media) throw new NotFoundException("Media not found");
 
-    const hasAccess =
-      media.ownerId === user.sub ||
-      media.access.some((access) => access.userId === user.sub);
+    const hasAccess = media.ownerId === user.sub || media.access.some((access) => access.userId === user.sub);
     if (!hasAccess) {
       throw new ForbiddenException("Access denied");
     }
@@ -450,11 +654,7 @@ export class MediaService {
     if (media.ownerId === user.sub) return;
 
     const access = media.access.find((a) => a.userId === user.sub);
-    if (
-      !access ||
-      access.level === AccessLevel.VIEW ||
-      access.level === AccessLevel.COMMENT
-    ) {
+    if (!access || access.level === AccessLevel.VIEW || access.level === AccessLevel.COMMENT) {
       throw new ForbiddenException("Edit access denied");
     }
   }

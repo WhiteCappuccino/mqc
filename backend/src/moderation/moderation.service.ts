@@ -42,6 +42,9 @@ export class ModerationService {
       include: {
         mediaItem: { select: { id: true, title: true } },
         qualityCheck: { select: { id: true, createdAt: true } },
+        falsePositiveMarker: {
+          select: { id: true, email: true, username: true, fullName: true },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 500,
@@ -61,6 +64,7 @@ export class ModerationService {
     const violation = await this.prisma.violation.create({
       data: {
         mediaItemId: media.id,
+        mediaVersion: media.version,
         type: payload.type,
         description: payload.description,
         severity: payload.severity,
@@ -92,6 +96,7 @@ export class ModerationService {
       const decision = await transaction.moderationDecision.create({
         data: {
           mediaItemId: mediaId,
+          mediaVersion: media.version,
           moderatorId: user.sub,
           status: dto.status,
           comment: dto.comment,
@@ -126,6 +131,56 @@ export class ModerationService {
     });
 
     return result;
+  }
+
+  async markViolationFalsePositive(
+    violationId: string,
+    isFalsePositive: boolean,
+    user: JwtPayload,
+  ) {
+    this.assertModerator(user);
+
+    const violation = await this.prisma.violation.findUnique({
+      where: { id: violationId },
+      include: {
+        mediaItem: { select: { id: true } },
+      },
+    });
+    if (!violation) throw new NotFoundException("Violation not found");
+
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      const updatedViolation = await transaction.violation.update({
+        where: { id: violationId },
+        data: {
+          isFalsePositive,
+          falsePositiveMarkedAt: isFalsePositive ? new Date() : null,
+          falsePositiveMarkedById: isFalsePositive ? user.sub : null,
+        },
+      });
+
+      if (violation.qualityCheckId) {
+        await transaction.qualityCheck.update({
+          where: { id: violation.qualityCheckId },
+          data: {
+            falsePositive: {
+              increment: isFalsePositive ? 1 : violation.isFalsePositive ? -1 : 0,
+            },
+          },
+        });
+      }
+
+      return updatedViolation;
+    });
+
+    await this.auditService.log({
+      actorId: user.sub,
+      action: "MARK_FALSE_POSITIVE",
+      entityType: "VIOLATION",
+      entityId: violationId,
+      metadata: { isFalsePositive, mediaItemId: violation.mediaItem.id },
+    });
+
+    return updated;
   }
 
   private assertModerator(user: JwtPayload) {

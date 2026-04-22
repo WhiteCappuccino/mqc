@@ -23,6 +23,7 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import type { JwtPayload } from "../auth/jwt-payload.interface";
 import { ListMediaQueryDto } from "./dto/list-media-query.dto";
+import { UpdateMediaVersionDto } from "./dto/update-media-version.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
 import { MediaService } from "./media.service";
 
@@ -43,6 +44,11 @@ export class MediaController {
     return this.mediaService.getById(id, user);
   }
 
+  @Get(":id/audit")
+  audit(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    return this.mediaService.listAuditLogs(id, user);
+  }
+
   @Post()
   @ApiConsumes("multipart/form-data")
   @ApiBody({
@@ -53,13 +59,14 @@ export class MediaController {
         description: { type: "string" },
         category: { type: "string" },
         tags: { type: "array", items: { type: "string" } },
+        fileUrl: { type: "string" },
         type: {
           type: "string",
           enum: ["IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"],
         },
         file: { type: "string", format: "binary" },
       },
-      required: ["title", "file"],
+      required: ["title"],
     },
   })
   @UseInterceptors(
@@ -69,11 +76,45 @@ export class MediaController {
     }),
   )
   upload(
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
     @Body() body: UploadMediaDto,
     @CurrentUser() user: JwtPayload,
   ) {
     return this.mediaService.upload(body, file, user);
+  }
+
+  @Post(":id/version")
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        description: { type: "string" },
+        category: { type: "string" },
+        tags: { type: "array", items: { type: "string" } },
+        fileUrl: { type: "string" },
+        type: {
+          type: "string",
+          enum: ["IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"],
+        },
+        file: { type: "string", format: "binary" },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 100 * 1024 * 1024 },
+    }),
+  )
+  uploadNewVersion(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: UpdateMediaVersionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.mediaService.uploadNewVersion(id, body, file, user);
   }
 
   @Post(":id/send-for-check")

@@ -4,6 +4,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { NotificationType, User } from "@prisma/client";
 import * as bcrypt from "bcrypt";
@@ -25,6 +26,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
   ) {}
@@ -66,11 +68,18 @@ export class AuthService {
       metadata: { email: user.email, username: user.username },
     });
 
-    const auth = this.issueToken(user);
-    return {
-      ...auth,
-      verificationToken: verifyToken,
-    };
+    const frontendUrl = this.configService.get<string>("FRONTEND_URL", "http://localhost:5173");
+    const verificationLink = `${frontendUrl}/verify-email?token=${encodeURIComponent(verifyToken)}`;
+
+    await this.notificationsService.notify({
+      userId: user.id,
+      type: NotificationType.STATUS_CHANGED,
+      title: "Email verification required",
+      message: `Verify your email to activate all features: ${verificationLink}`,
+      alsoEmail: true,
+    });
+
+    return this.issueToken(user);
   }
 
   async login(dto: LoginDto, metadata?: { ipAddress?: string; userAgent?: string }) {
@@ -126,7 +135,7 @@ export class AuthService {
       userId: user.id,
       type: NotificationType.STATUS_CHANGED,
       title: "Password reset requested",
-      message: `Use reset token: ${token}`,
+      message: `Use this link to reset password: ${this.configService.get<string>("FRONTEND_URL", "http://localhost:5173")}/reset-password?token=${encodeURIComponent(token)}`,
       alsoEmail: true,
     });
 
@@ -138,7 +147,7 @@ export class AuthService {
       metadata: {},
     });
 
-    return { ok: true, resetToken: token };
+    return { ok: true };
   }
 
   async resetPassword(dto: ResetPasswordDto) {

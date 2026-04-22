@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import {
   NotificationChannel,
   NotificationType,
@@ -6,6 +6,7 @@ import {
   User,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { MailService } from "../mail/mail.service";
 
 interface CreateNotificationInput {
   userId: string;
@@ -17,7 +18,12 @@ interface CreateNotificationInput {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   async notify(input: CreateNotificationInput) {
     await this.prisma.notification.create({
@@ -31,6 +37,11 @@ export class NotificationsService {
     });
 
     if (input.alsoEmail) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { email: true },
+      });
+
       await this.prisma.notification.create({
         data: {
           userId: input.userId,
@@ -40,6 +51,21 @@ export class NotificationsService {
           message: input.message,
         },
       });
+
+      if (user?.email) {
+        try {
+          await this.mailService.send({
+            to: user.email,
+            subject: input.title,
+            text: input.message,
+          });
+        } catch (error) {
+          this.logger.error(
+            `Failed to send email notification to ${user.email}`,
+            error instanceof Error ? error.stack : undefined,
+          );
+        }
+      }
     }
   }
 

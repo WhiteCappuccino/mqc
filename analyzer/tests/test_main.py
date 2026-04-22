@@ -21,6 +21,7 @@ def test_analyze_manual_review():
             "description": "short",
             "mimeType": "image/png",
             "sizeBytes": 2_048,
+            "fileName": "banner.png",
         },
     )
 

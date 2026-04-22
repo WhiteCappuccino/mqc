@@ -8,6 +8,9 @@ interface AnalyzePayload {
   description?: string;
   mimeType: string;
   sizeBytes: number;
+  fileName: string;
+  fileUrl?: string;
+  duplicateHint?: boolean;
 }
 
 export interface AnalyzeResponse {

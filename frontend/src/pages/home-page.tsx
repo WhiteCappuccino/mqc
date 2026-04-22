@@ -20,18 +20,18 @@ export function HomePage() {
               Media Quality Control Platform
             </Typography>
             <Typography color="text.secondary">
-              Система автоматизированной проверки, модерации и совместной работы с
-              медиаконтентом: изображения, видео, аудио и тексты.
+              Platform for automated quality checks, moderation, and collaboration across images,
+              video, audio, and text content.
             </Typography>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <Button variant="contained" component={RouterLink} to="/login">
-                Войти
+                Sign in
               </Button>
               <Button variant="outlined" component={RouterLink} to="/register">
-                Регистрация
+                Register
               </Button>
               <Button component={RouterLink} to="/forgot-password">
-                Восстановить пароль
+                Reset password
               </Button>
             </Stack>
           </Stack>
@@ -40,4 +40,3 @@ export function HomePage() {
     </Box>
   );
 }
-

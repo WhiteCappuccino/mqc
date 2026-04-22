@@ -40,7 +40,6 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const { register: registerAccount } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const [verificationToken, setVerificationToken] = useState<string | null>(null);
 
   const {
     register,
@@ -52,17 +51,13 @@ export function RegisterPage() {
 
   async function onSubmit(values: FormValues) {
     setError(null);
-    setVerificationToken(null);
     try {
-      const auth = await registerAccount({
+      await registerAccount({
         email: values.email,
         username: values.username,
         fullName: values.fullName,
         password: values.password,
       });
-      if (auth.verificationToken) {
-        setVerificationToken(auth.verificationToken);
-      }
       navigate("/dashboard");
     } catch (submitError) {
       setError(
@@ -92,11 +87,6 @@ export function RegisterPage() {
           <form onSubmit={handleSubmit(onSubmit)}>
             <Stack spacing={2}>
               {error && <Alert severity="error">{error}</Alert>}
-              {verificationToken && (
-                <Alert severity="info">
-                  Verification token (demo): {verificationToken}
-                </Alert>
-              )}
               <TextField
                 label="Full name"
                 {...register("fullName")}
