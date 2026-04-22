@@ -1,0 +1,372 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  TEXT
+  MIXED
+}
+
+enum MediaStatus {
+  UPLOADED
+  IN_PROCESS
+  AUTO_CHECKED
+  NEEDS_MANUAL_MODERATION
+  ON_REVISION
+  APPROVED
+  REJECTED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ModerationStatus {
+  APPROVED
+  REJECTED
+  NEEDS_REVISION
+}
+
+enum AccessLevel {
+  VIEW
+  COMMENT
+  EDIT
+  MODERATE
+  MANAGE
+}
+
+enum ViolationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ViolationSource {
+  SYSTEM
+  MODERATOR
+}
+
+enum CheckStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  NEEDS_MANUAL_REVIEW
+}
+
+enum NotificationType {
+  AUTO_CHECK_FINISHED
+  NEW_COMMENT
+  STATUS_CHANGED
+  COLLAB_INVITE
+  MODERATION_ASSIGNED
+  REVISION_REQUIRED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+model User {
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  username               String                  @unique
+  fullName               String
+  passwordHash           String
+  role                   Role                    @default(USER)
+  isActive               Boolean                 @default(true)
+  emailVerified          Boolean                 @default(false)
+  notificationEmail      Boolean                 @default(true)
+  notificationInApp      Boolean                 @default(true)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  mediaItems             MediaItem[]
+  qualityChecksInitiated QualityCheck[]          @relation("QualityCheckInitiator")
+  decisions              ModerationDecision[]
+  loginHistory           LoginHistory[]
+  passwordResetTokens    PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  collectionsOwned       Collection[]            @relation("CollectionOwner")
+  collectionCollaborator CollectionCollaborator[]
+  favorites              Favorite[]
+  mediaAccess            MediaAccess[]
+  comments               Comment[]
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  systemSettingsUpdated  SystemSetting[]
+}
+
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  userAgent String?
+  success   Boolean
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Category {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?
+  mediaItems  MediaItem[]
+}
+
+model Tag {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  mediaLinks  MediaTag[]
+}
+
+model MediaTag {
+  mediaItemId String
+  tagId       String
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([mediaItemId, tagId])
+}
+
+model MediaItem {
+  id              String                 @id @default(cuid())
+  title           String
+  description     String?
+  storageKey      String                 @unique
+  fileName        String
+  mimeType        String
+  sizeBytes       Int
+  type            MediaType
+  status          MediaStatus            @default(UPLOADED)
+  previewUrl      String?
+  ownerId         String
+  owner           User                   @relation(fields: [ownerId], references: [id])
+  categoryId      String?
+  category        Category?              @relation(fields: [categoryId], references: [id])
+  version         Int                    @default(1)
+  publishedAt     DateTime?
+  archivedAt      DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  tags            MediaTag[]
+  qualityChecks   QualityCheck[]
+  violations      Violation[]
+  decisions       ModerationDecision[]
+  comments        Comment[]
+  favorites       Favorite[]
+  collectionItems CollectionItem[]
+  access          MediaAccess[]
+}
+
+model QualityCriterion {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  weight      Float    @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model QualityCheck {
+  id             String      @id @default(cuid())
+  mediaItemId    String
+  mediaItem      MediaItem   @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  initiatedById  String?
+  initiatedBy    User?       @relation("QualityCheckInitiator", fields: [initiatedById], references: [id])
+  status         CheckStatus @default(QUEUED)
+  criteria       Json
+  autoResult     Json
+  manualResult   Json?
+  autoScore      Float
+  manualScore    Float?
+  finalScore     Float
+  falsePositive  Int         @default(0)
+  createdAt      DateTime    @default(now())
+  finishedAt     DateTime?
+  violations     Violation[]
+  comments       Comment[]
+}
+
+model ViolationDictionary {
+  id              String             @id @default(cuid())
+  code            String             @unique
+  name            String
+  description     String?
+  defaultSeverity ViolationSeverity  @default(MEDIUM)
+  isActive        Boolean            @default(true)
+  violations      Violation[]
+}
+
+model Violation {
+  id                String             @id @default(cuid())
+  mediaItemId       String
+  mediaItem         MediaItem          @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  qualityCheckId    String?
+  qualityCheck      QualityCheck?      @relation(fields: [qualityCheckId], references: [id], onDelete: SetNull)
+  dictionaryId      String?
+  dictionary        ViolationDictionary? @relation(fields: [dictionaryId], references: [id], onDelete: SetNull)
+  type              String
+  description       String
+  severity          ViolationSeverity
+  marker            String?
+  coordinates       String?
+  source            ViolationSource
+  createdAt         DateTime           @default(now())
+  comments          Comment[]
+}
+
+model ModerationDecision {
+  id            String            @id @default(cuid())
+  mediaItemId    String
+  mediaItem      MediaItem         @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  moderatorId    String
+  moderator      User              @relation(fields: [moderatorId], references: [id])
+  status         ModerationStatus
+  qualityLevel   Int?
+  comment        String?
+  createdAt      DateTime          @default(now())
+}
+
+model Collection {
+  id            String                   @id @default(cuid())
+  name          String
+  description   String?
+  ownerId       String
+  owner         User                     @relation("CollectionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  isPrivate     Boolean                  @default(true)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  items         CollectionItem[]
+  collaborators CollectionCollaborator[]
+}
+
+model CollectionItem {
+  collectionId  String
+  mediaItemId   String
+  createdAt     DateTime   @default(now())
+  collection    Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  mediaItem     MediaItem  @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, mediaItemId])
+}
+
+model CollectionCollaborator {
+  id            String      @id @default(cuid())
+  collectionId  String
+  collection    Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level         AccessLevel @default(VIEW)
+  createdAt     DateTime    @default(now())
+
+  @@unique([collectionId, userId])
+}
+
+model Favorite {
+  userId      String
+  mediaItemId String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@id([userId, mediaItemId])
+}
+
+model MediaAccess {
+  id          String      @id @default(cuid())
+  mediaItemId String
+  mediaItem   MediaItem   @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level       AccessLevel @default(VIEW)
+  createdAt   DateTime    @default(now())
+
+  @@unique([mediaItemId, userId])
+}
+
+model Comment {
+  id            String       @id @default(cuid())
+  authorId       String
+  author         User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  text           String
+  mediaItemId    String?
+  mediaItem      MediaItem?   @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  qualityCheckId String?
+  qualityCheck   QualityCheck? @relation(fields: [qualityCheckId], references: [id], onDelete: Cascade)
+  violationId    String?
+  violation      Violation?   @relation(fields: [violationId], references: [id], onDelete: Cascade)
+  parentId       String?
+  parent         Comment?     @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies        Comment[]    @relation("CommentReplies")
+  isResolved     Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  userId     String
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  channel    NotificationChannel  @default(IN_APP)
+  title      String
+  message    String
+  isRead     Boolean              @default(false)
+  createdAt  DateTime             @default(now())
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorId    String?
+  actor      User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json
+  createdAt  DateTime  @default(now())
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+}
