@@ -6,17 +6,98 @@ import {
   Checkbox,
   CircularProgress,
   FormControlLabel,
+  MenuItem,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
 import type { MediaItem, Viewer } from "../types/domain";
+import type { UiPreferences } from "../ui/ui-preferences";
 
-export function ProfilePage() {
-  const { token } = useAuth();
+interface ProfilePageProps {
+  language: "en" | "ru";
+  preferences: UiPreferences;
+  onPreferencesChange: Dispatch<SetStateAction<UiPreferences>>;
+}
+
+const copy = {
+  en: {
+    title: "Profile",
+    interfaceTitle: "Interface settings",
+    interfaceDescription: "Adjust the workspace look and behavior without mixing those options into notifications.",
+    profileUnavailable: "Profile unavailable",
+    loadError: "Failed to load profile",
+    saveError: "Failed to save profile",
+    passwordError: "Failed to change password",
+    profileUpdated: "Profile updated",
+    passwordChanged: "Password changed",
+    email: "Email",
+    fullName: "Full name",
+    username: "Username",
+    themeMode: "Theme",
+    lightTheme: "Light",
+    darkTheme: "Dark",
+    languageSetting: "Language",
+    english: "English",
+    russian: "Russian",
+    showGrid: "Show background grid",
+    softBorders: "Use softer interface borders",
+    inAppNotifications: "In-app notifications",
+    emailNotifications: "Email notifications",
+    hideDashboardHero: "Hide large dashboard header",
+    interfaceApplied: "Interface settings are applied instantly",
+    saveProfile: "Save profile",
+    logout: "Logout",
+    changePassword: "Change password",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    updatePassword: "Update password",
+    history: "Upload and check history",
+    noActivity: "No activity yet",
+  },
+  ru: {
+    title: "Профиль",
+    interfaceTitle: "Настройки интерфейса",
+    interfaceDescription:
+      "Меняйте внешний вид и поведение рабочего пространства отдельно от уведомлений.",
+    profileUnavailable: "Профиль недоступен",
+    loadError: "Не удалось загрузить профиль",
+    saveError: "Не удалось сохранить профиль",
+    passwordError: "Не удалось изменить пароль",
+    profileUpdated: "Профиль обновлен",
+    passwordChanged: "Пароль изменен",
+    email: "Эл. почта",
+    fullName: "Полное имя",
+    username: "Имя пользователя",
+    themeMode: "Тема",
+    lightTheme: "Светлая",
+    darkTheme: "Темная",
+    languageSetting: "Язык",
+    english: "Английский",
+    russian: "Русский",
+    showGrid: "Показывать фоновую сетку",
+    softBorders: "Смягчать границы интерфейса",
+    inAppNotifications: "Уведомления в приложении",
+    emailNotifications: "Email-уведомления",
+    hideDashboardHero: "Скрыть большой заголовок на дашборде",
+    interfaceApplied: "Настройки интерфейса применяются сразу",
+    saveProfile: "Сохранить профиль",
+    logout: "Выйти",
+    changePassword: "Сменить пароль",
+    currentPassword: "Текущий пароль",
+    newPassword: "Новый пароль",
+    updatePassword: "Обновить пароль",
+    history: "История загрузок и проверок",
+    noActivity: "Пока нет активности",
+  },
+} as const;
+
+export function ProfilePage({ language, preferences, onPreferencesChange }: ProfilePageProps) {
+  const { token, logout } = useAuth();
+  const t = copy[language];
   const [profile, setProfile] = useState<Viewer | null>(null);
   const [history, setHistory] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +118,7 @@ export function ProfilePage() {
       setProfile(profileData);
       setHistory(historyData);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load profile");
+      setError(loadError instanceof Error ? loadError.message : t.loadError);
     } finally {
       setLoading(false);
     }
@@ -62,9 +143,9 @@ export function ProfilePage() {
         token,
       );
       setProfile(updated);
-      setSuccess("Profile updated");
+      setSuccess(t.profileUpdated);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save profile");
+      setError(saveError instanceof Error ? saveError.message : t.saveError);
     }
   }
 
@@ -76,9 +157,9 @@ export function ProfilePage() {
       await api.changePassword({ currentPassword, newPassword }, token);
       setCurrentPassword("");
       setNewPassword("");
-      setSuccess("Password changed");
+      setSuccess(t.passwordChanged);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to change password");
+      setError(saveError instanceof Error ? saveError.message : t.passwordError);
     }
   }
 
@@ -91,30 +172,28 @@ export function ProfilePage() {
   }
 
   if (!profile) {
-    return <Alert severity="error">Profile unavailable</Alert>;
+    return <Alert severity="error">{t.profileUnavailable}</Alert>;
   }
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Profile
-      </Typography>
+      <Typography variant="h2">{t.title}</Typography>
       {error && <Alert severity="error">{error}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}
 
       <Card>
         <CardContent>
           <Stack spacing={2}>
-            <TextField label="Email" value={profile.email} disabled />
+            <TextField label={t.email} value={profile.email} disabled />
             <TextField
-              label="Full name"
+              label={t.fullName}
               value={profile.fullName}
               onChange={(event) =>
                 setProfile((prev) => (prev ? { ...prev, fullName: event.target.value } : prev))
               }
             />
             <TextField
-              label="Username"
+              label={t.username}
               value={profile.username}
               onChange={(event) =>
                 setProfile((prev) => (prev ? { ...prev, username: event.target.value } : prev))
@@ -131,7 +210,7 @@ export function ProfilePage() {
                   }
                 />
               }
-              label="In-app notifications"
+              label={t.inAppNotifications}
             />
             <FormControlLabel
               control={
@@ -144,10 +223,13 @@ export function ProfilePage() {
                   }
                 />
               }
-              label="Email notifications"
+              label={t.emailNotifications}
             />
             <Button variant="contained" onClick={saveProfile}>
-              Save profile
+              {t.saveProfile}
+            </Button>
+            <Button color="error" variant="outlined" onClick={logout}>
+              {t.logout}
             </Button>
           </Stack>
         </CardContent>
@@ -156,23 +238,23 @@ export function ProfilePage() {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>
-            Change password
+            {t.changePassword}
           </Typography>
           <Stack spacing={2}>
             <TextField
-              label="Current password"
+              label={t.currentPassword}
               type="password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
             />
             <TextField
-              label="New password"
+              label={t.newPassword}
               type="password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
             />
             <Button variant="outlined" onClick={changePassword}>
-              Update password
+              {t.updatePassword}
             </Button>
           </Stack>
         </CardContent>
@@ -180,8 +262,90 @@ export function ProfilePage() {
 
       <Card>
         <CardContent>
+          <Stack spacing={2}>
+            <Stack spacing={0.5}>
+              <Typography variant="h6">{t.interfaceTitle}</Typography>
+              <Typography color="text.secondary">{t.interfaceDescription}</Typography>
+            </Stack>
+            <TextField
+              select
+              label={t.themeMode}
+              value={preferences.colorMode}
+              onChange={(event) =>
+                onPreferencesChange((current) => ({
+                  ...current,
+                  colorMode: event.target.value as UiPreferences["colorMode"],
+                }))
+              }
+            >
+              <MenuItem value="light">{t.lightTheme}</MenuItem>
+              <MenuItem value="dark">{t.darkTheme}</MenuItem>
+            </TextField>
+            <TextField
+              select
+              label={t.languageSetting}
+              value={preferences.language}
+              onChange={(event) =>
+                onPreferencesChange((current) => ({
+                  ...current,
+                  language: event.target.value as UiPreferences["language"],
+                }))
+              }
+            >
+              <MenuItem value="en">{t.english}</MenuItem>
+              <MenuItem value="ru">{t.russian}</MenuItem>
+            </TextField>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={preferences.showGrid}
+                  onChange={(event) =>
+                    onPreferencesChange((current) => ({
+                      ...current,
+                      showGrid: event.target.checked,
+                    }))
+                  }
+                />
+              }
+              label={t.showGrid}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={preferences.softBorders}
+                  onChange={(event) =>
+                    onPreferencesChange((current) => ({
+                      ...current,
+                      softBorders: event.target.checked,
+                    }))
+                  }
+                />
+              }
+              label={t.softBorders}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={preferences.hideDashboardHero}
+                  onChange={(event) =>
+                    onPreferencesChange((current) => ({
+                      ...current,
+                      hideDashboardHero: event.target.checked,
+                    }))
+                  }
+                />
+              }
+              label={t.hideDashboardHero}
+            />
+            <Alert severity="info">{t.interfaceApplied}</Alert>
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>
-            Upload and check history
+            {t.history}
           </Typography>
           <Stack spacing={1}>
             {history.map((item) => (
@@ -189,11 +353,10 @@ export function ProfilePage() {
                 {item.title} | {item.status} | {new Date(item.createdAt).toLocaleString()}
               </Typography>
             ))}
-            {!history.length && <Typography color="text.secondary">No activity yet</Typography>}
+            {!history.length && <Typography color="text.secondary">{t.noActivity}</Typography>}
           </Stack>
         </CardContent>
       </Card>
     </Stack>
   );
 }
-

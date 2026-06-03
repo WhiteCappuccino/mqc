@@ -20,8 +20,70 @@ import type { AccessLevel, CollectionItem } from "../types/domain";
 
 const accessLevels: AccessLevel[] = ["VIEW", "COMMENT", "EDIT", "MODERATE", "MANAGE"];
 
-export function CollectionsPage() {
+interface CollectionsPageProps {
+  language: "en" | "ru";
+}
+
+const copy = {
+  en: {
+    title: "Collections",
+    createCollection: "Create collection",
+    name: "Name",
+    description: "Description",
+    privateCollection: "Private collection",
+    create: "Create",
+    private: "Private",
+    public: "Public",
+    items: "items",
+    remove: "Remove",
+    mediaId: "Media ID",
+    addItem: "Add item",
+    shareEmail: "Share email",
+    share: "Share",
+    editCollection: "Edit collection",
+    saveChanges: "Save changes",
+    delete: "Delete",
+    loadError: "Failed to load collections",
+    createError: "Failed to create",
+    addItemError: "Failed to add item",
+    shareError: "Failed to share collection",
+    deleteError: "Failed to delete collection",
+    updateError: "Failed to update collection",
+    removeItemError: "Failed to remove item",
+    removeCollaboratorError: "Failed to remove collaborator",
+  },
+  ru: {
+    title: "Коллекции",
+    createCollection: "Создать коллекцию",
+    name: "Название",
+    description: "Описание",
+    privateCollection: "Приватная коллекция",
+    create: "Создать",
+    private: "Приватная",
+    public: "Публичная",
+    items: "элементов",
+    remove: "Убрать",
+    mediaId: "ID медиа",
+    addItem: "Добавить",
+    shareEmail: "Email для доступа",
+    share: "Поделиться",
+    editCollection: "Редактировать коллекцию",
+    saveChanges: "Сохранить изменения",
+    delete: "Удалить",
+    loadError: "Не удалось загрузить коллекции",
+    createError: "Не удалось создать коллекцию",
+    addItemError: "Не удалось добавить элемент",
+    shareError: "Не удалось открыть доступ к коллекции",
+    deleteError: "Не удалось удалить коллекцию",
+    updateError: "Не удалось обновить коллекцию",
+    removeItemError: "Не удалось убрать элемент",
+    removeCollaboratorError: "Не удалось удалить участника",
+  },
+} as const;
+
+export function CollectionsPage({ language }: CollectionsPageProps) {
   const { token } = useAuth();
+  const t = copy[language];
   const [items, setItems] = useState<CollectionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +105,7 @@ export function CollectionsPage() {
     try {
       setItems(await api.listCollections(token));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load collections");
+      setError(loadError instanceof Error ? loadError.message : t.loadError);
     } finally {
       setLoading(false);
     }
@@ -62,7 +124,7 @@ export function CollectionsPage() {
       setDescription("");
       await load();
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Failed to create");
+      setError(createError instanceof Error ? createError.message : t.createError);
     }
   }
 
@@ -76,7 +138,7 @@ export function CollectionsPage() {
       setMediaId((prev) => ({ ...prev, [collectionId]: "" }));
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to add item");
+      setError(actionError instanceof Error ? actionError.message : t.addItemError);
     }
   }
 
@@ -97,7 +159,7 @@ export function CollectionsPage() {
       setShareEmail((prev) => ({ ...prev, [collectionId]: "" }));
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to share collection");
+      setError(actionError instanceof Error ? actionError.message : t.shareError);
     }
   }
 
@@ -108,7 +170,7 @@ export function CollectionsPage() {
       await api.deleteCollection(collectionId, token);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to delete collection");
+      setError(actionError instanceof Error ? actionError.message : t.deleteError);
     }
   }
 
@@ -127,7 +189,7 @@ export function CollectionsPage() {
       );
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to update collection");
+      setError(actionError instanceof Error ? actionError.message : t.updateError);
     }
   }
 
@@ -138,7 +200,7 @@ export function CollectionsPage() {
       await api.removeCollectionItem(collectionId, mediaItemId, token);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to remove item");
+      setError(actionError instanceof Error ? actionError.message : t.removeItemError);
     }
   }
 
@@ -149,7 +211,7 @@ export function CollectionsPage() {
       await api.removeCollectionCollaborator(collectionId, userId, token);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to remove collaborator");
+      setError(actionError instanceof Error ? actionError.message : t.removeCollaboratorError);
     }
   }
 
@@ -163,21 +225,19 @@ export function CollectionsPage() {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Collections
-      </Typography>
+      <Typography variant="h2">{t.title}</Typography>
       {error && <Alert severity="error">{error}</Alert>}
 
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>
-            Create collection
+            {t.createCollection}
           </Typography>
           <Stack spacing={2}>
-            <TextField value={name} label="Name" onChange={(event) => setName(event.target.value)} />
+            <TextField value={name} label={t.name} onChange={(event) => setName(event.target.value)} />
             <TextField
               value={description}
-              label="Description"
+              label={t.description}
               onChange={(event) => setDescription(event.target.value)}
             />
             <FormControlLabel
@@ -187,10 +247,10 @@ export function CollectionsPage() {
                   onChange={(event) => setIsPrivate(event.target.checked)}
                 />
               }
-              label="Private collection"
+              label={t.privateCollection}
             />
             <Button variant="contained" onClick={create}>
-              Create
+              {t.create}
             </Button>
           </Stack>
         </CardContent>
@@ -202,7 +262,7 @@ export function CollectionsPage() {
             <Typography variant="h6">{item.name}</Typography>
             <Typography color="text.secondary">{item.description}</Typography>
             <Typography variant="body2" sx={{ mt: 1 }}>
-              {item.isPrivate ? "Private" : "Public"} | items: {item.items?.length ?? 0}
+              {item.isPrivate ? t.private : t.public} | {t.items}: {item.items?.length ?? 0}
             </Typography>
             <Stack spacing={1} sx={{ mt: 2 }}>
               {(item.items ?? []).map((collectionItem) => (
@@ -217,7 +277,7 @@ export function CollectionsPage() {
                     color="error"
                     onClick={() => void removeItem(item.id, collectionItem.mediaItemId)}
                   >
-                    Remove
+                    {t.remove}
                   </Button>
                 </Stack>
               ))}
@@ -225,18 +285,18 @@ export function CollectionsPage() {
             <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
               <TextField
                 size="small"
-                label="Media ID"
+                label={t.mediaId}
                 value={mediaId[item.id] ?? ""}
                 onChange={(event) =>
                   setMediaId((prev) => ({ ...prev, [item.id]: event.target.value }))
                 }
               />
-              <Button onClick={() => addItem(item.id)}>Add item</Button>
+              <Button onClick={() => addItem(item.id)}>{t.addItem}</Button>
             </Stack>
             <Stack direction="row" spacing={1} sx={{ mt: 2, alignItems: "center" }}>
               <TextField
                 size="small"
-                label="Share email"
+                label={t.shareEmail}
                 value={shareEmail[item.id] ?? ""}
                 onChange={(event) =>
                   setShareEmail((prev) => ({ ...prev, [item.id]: event.target.value }))
@@ -259,7 +319,7 @@ export function CollectionsPage() {
                   </MenuItem>
                 ))}
               </TextField>
-              <Button onClick={() => share(item.id)}>Share</Button>
+              <Button onClick={() => share(item.id)}>{t.share}</Button>
             </Stack>
             <Stack spacing={1} sx={{ mt: 2 }}>
               {(item.collaborators ?? []).map((collaborator) => (
@@ -272,16 +332,16 @@ export function CollectionsPage() {
                     color="error"
                     onClick={() => void removeCollaborator(item.id, collaborator.userId)}
                   >
-                    Remove
+                    {t.remove}
                   </Button>
                 </Stack>
               ))}
             </Stack>
             <Stack spacing={1} sx={{ mt: 2 }}>
-              <Typography variant="subtitle2">Edit collection</Typography>
+              <Typography variant="subtitle2">{t.editCollection}</Typography>
               <TextField
                 size="small"
-                label="Name"
+                label={t.name}
                 value={editName[item.id] ?? item.name}
                 onChange={(event) =>
                   setEditName((prev) => ({ ...prev, [item.id]: event.target.value }))
@@ -289,7 +349,7 @@ export function CollectionsPage() {
               />
               <TextField
                 size="small"
-                label="Description"
+                label={t.description}
                 value={editDescription[item.id] ?? item.description ?? ""}
                 onChange={(event) =>
                   setEditDescription((prev) => ({ ...prev, [item.id]: event.target.value }))
@@ -304,16 +364,16 @@ export function CollectionsPage() {
                     }
                   />
                 }
-                label="Private"
+                label={t.private}
               />
               <Button variant="outlined" onClick={() => void update(item.id)}>
-                Save changes
+                {t.saveChanges}
               </Button>
             </Stack>
           </CardContent>
           <CardActions>
             <Button color="error" onClick={() => remove(item.id)}>
-              Delete
+              {t.delete}
             </Button>
           </CardActions>
         </Card>

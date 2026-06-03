@@ -14,8 +14,56 @@ import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
 import type { MediaItem } from "../types/domain";
 
-export function ModerationPage() {
+interface ModerationPageProps {
+  language: "en" | "ru";
+}
+
+const copy = {
+  en: {
+    title: "Moderation queue",
+    loadError: "Failed to load",
+    decisionError: "Decision failed",
+    falsePositiveError: "Failed to update false-positive flag",
+    status: "status",
+    type: "type",
+    comment: "Comment",
+    qualityLevel: "Quality level (0-100)",
+    approve: "Approve",
+    requestFix: "Request fix",
+    reject: "Reject",
+    queueEmpty: "Queue is empty",
+    violationHistory: "Violation history",
+    falsePositive: "false positive",
+    markFp: "Mark FP",
+    unmarkFp: "Unmark FP",
+    noViolations: "No violations recorded",
+    unknown: "n/a",
+  },
+  ru: {
+    title: "Очередь модерации",
+    loadError: "Не удалось загрузить данные",
+    decisionError: "Не удалось отправить решение",
+    falsePositiveError: "Не удалось обновить флаг ложного срабатывания",
+    status: "статус",
+    type: "тип",
+    comment: "Комментарий",
+    qualityLevel: "Оценка качества (0-100)",
+    approve: "Одобрить",
+    requestFix: "На доработку",
+    reject: "Отклонить",
+    queueEmpty: "Очередь пуста",
+    violationHistory: "История нарушений",
+    falsePositive: "ложное срабатывание",
+    markFp: "Пометить как ЛС",
+    unmarkFp: "Снять метку ЛС",
+    noViolations: "Нарушений пока нет",
+    unknown: "н/д",
+  },
+} as const;
+
+export function ModerationPage({ language }: ModerationPageProps) {
   const { token } = useAuth();
+  const t = copy[language];
   const [queue, setQueue] = useState<MediaItem[]>([]);
   const [violationHistory, setViolationHistory] = useState<
     {
@@ -53,7 +101,7 @@ export function ModerationPage() {
         }[],
       );
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load");
+      setError(loadError instanceof Error ? loadError.message : t.loadError);
     } finally {
       setLoading(false);
     }
@@ -81,9 +129,7 @@ export function ModerationPage() {
       );
       await load();
     } catch (decisionError) {
-      setError(
-        decisionError instanceof Error ? decisionError.message : "Decision failed",
-      );
+      setError(decisionError instanceof Error ? decisionError.message : t.decisionError);
     }
   }
 
@@ -94,7 +140,9 @@ export function ModerationPage() {
       await api.markViolationFalsePositive(violationId, !currentValue, token);
       await load();
     } catch (flagError) {
-      setError(flagError instanceof Error ? flagError.message : "Failed to update false-positive flag");
+      setError(
+        flagError instanceof Error ? flagError.message : t.falsePositiveError,
+      );
     }
   }
 
@@ -108,8 +156,8 @@ export function ModerationPage() {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Moderation queue
+      <Typography variant="h2">
+        {t.title}
       </Typography>
       {error && <Alert severity="error">{error}</Alert>}
       {queue.map((item) => (
@@ -117,10 +165,10 @@ export function ModerationPage() {
           <CardContent>
             <Typography variant="h6">{item.title}</Typography>
             <Typography color="text.secondary">
-              status={item.status} | type={item.type}
+              {t.status}={item.status} | {t.type}={item.type}
             </Typography>
             <TextField
-              label="Comment"
+              label={t.comment}
               size="small"
               fullWidth
               sx={{ mt: 2 }}
@@ -130,7 +178,7 @@ export function ModerationPage() {
               }
             />
             <TextField
-              label="Quality level (0-100)"
+              label={t.qualityLevel}
               type="number"
               size="small"
               sx={{ mt: 1, width: 220 }}
@@ -145,43 +193,43 @@ export function ModerationPage() {
           </CardContent>
           <CardActions>
             <Button color="success" onClick={() => decide(item.id, "APPROVED")}>
-              Approve
+              {t.approve}
             </Button>
             <Button color="warning" onClick={() => decide(item.id, "NEEDS_REVISION")}>
-              Request fix
+              {t.requestFix}
             </Button>
             <Button color="error" onClick={() => decide(item.id, "REJECTED")}>
-              Reject
+              {t.reject}
             </Button>
           </CardActions>
         </Card>
       ))}
-      {queue.length === 0 && <Typography color="text.secondary">Queue is empty</Typography>}
+      {queue.length === 0 && <Typography color="text.secondary">{t.queueEmpty}</Typography>}
 
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Violation history
+            {t.violationHistory}
           </Typography>
           <Stack spacing={1}>
             {violationHistory.map((entry) => (
               <Stack key={entry.id} direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                  {entry.severity} | {entry.type} | {entry.mediaItem?.title ?? "n/a"} |{" "}
+                  {entry.severity} | {entry.type} | {entry.mediaItem?.title ?? t.unknown} |{" "}
                   {new Date(entry.createdAt).toLocaleString()}
-                  {entry.isFalsePositive ? " | false positive" : ""}
+                  {entry.isFalsePositive ? ` | ${t.falsePositive}` : ""}
                 </Typography>
                 <Button
                   size="small"
                   variant="outlined"
                   onClick={() => toggleFalsePositive(entry.id, entry.isFalsePositive)}
                 >
-                  {entry.isFalsePositive ? "Unmark FP" : "Mark FP"}
+                  {entry.isFalsePositive ? t.unmarkFp : t.markFp}
                 </Button>
               </Stack>
             ))}
             {!violationHistory.length && (
-              <Typography color="text.secondary">No violations recorded</Typography>
+              <Typography color="text.secondary">{t.noViolations}</Typography>
             )}
           </Stack>
         </CardContent>

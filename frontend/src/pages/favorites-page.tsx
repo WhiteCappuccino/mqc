@@ -15,8 +15,32 @@ import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
 import type { MediaItem } from "../types/domain";
 
-export function FavoritesPage() {
+interface FavoritesPageProps {
+  language: "en" | "ru";
+}
+
+const copy = {
+  en: {
+    title: "Favorites",
+    open: "Open",
+    remove: "Remove",
+    empty: "No favorites yet",
+    loadError: "Failed to load favorites",
+    removeError: "Failed to remove",
+  },
+  ru: {
+    title: "Избранное",
+    open: "Открыть",
+    remove: "Убрать",
+    empty: "Пока нет избранного",
+    loadError: "Не удалось загрузить избранное",
+    removeError: "Не удалось удалить",
+  },
+} as const;
+
+export function FavoritesPage({ language }: FavoritesPageProps) {
   const { token } = useAuth();
+  const t = copy[language];
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +53,7 @@ export function FavoritesPage() {
       const favorites = await api.listFavorites(token);
       setItems(favorites.map((entry) => entry.mediaItem));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load favorites");
+      setError(loadError instanceof Error ? loadError.message : t.loadError);
     } finally {
       setLoading(false);
     }
@@ -46,7 +70,7 @@ export function FavoritesPage() {
       await api.removeFavorite(mediaId, token);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to remove");
+      setError(actionError instanceof Error ? actionError.message : t.removeError);
     }
   }
 
@@ -60,9 +84,7 @@ export function FavoritesPage() {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Favorites
-      </Typography>
+      <Typography variant="h2">{t.title}</Typography>
       {error && <Alert severity="error">{error}</Alert>}
       {items.map((item) => (
         <Card key={item.id}>
@@ -75,16 +97,15 @@ export function FavoritesPage() {
           </CardContent>
           <CardActions>
             <Button component={RouterLink} to={`/media/${item.id}`}>
-              Open
+              {t.open}
             </Button>
             <Button color="error" onClick={() => remove(item.id)}>
-              Remove
+              {t.remove}
             </Button>
           </CardActions>
         </Card>
       ))}
-      {!items.length && <Typography color="text.secondary">No favorites yet</Typography>}
+      {!items.length && <Typography color="text.secondary">{t.empty}</Typography>}
     </Stack>
   );
 }
-

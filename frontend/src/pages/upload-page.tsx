@@ -1,9 +1,9 @@
 import {
   Alert,
   Button,
-  Card,
-  CardContent,
+  Box,
   MenuItem,
+  Paper,
   Stack,
   TextField,
   Typography,
@@ -16,7 +16,49 @@ import type { MediaType } from "../types/domain";
 
 const mediaTypes: MediaType[] = ["IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"];
 
-export function UploadPage() {
+interface UploadPageProps {
+  language: "en" | "ru";
+}
+
+const copy = {
+  en: {
+    title: "Upload file",
+    chooseFileOrUrl: "Choose file or provide URL",
+    uploadFailed: "Upload failed",
+    titleLabel: "Title",
+    mediaType: "Media type",
+    category: "Category",
+    tags: "Tags (comma separated)",
+    description: "Description",
+    chooseFile: "Choose file",
+    selectedFile: "Selected",
+    fileUrl: "Or file URL (http/https)",
+    afterUpload: "After upload",
+    sendToCheck: "Send to automatic check",
+    keepUploaded: "Keep as uploaded",
+    submit: "Submit",
+  },
+  ru: {
+    title: "Загрузить файл",
+    chooseFileOrUrl: "Выберите файл или укажите URL",
+    uploadFailed: "Не удалось загрузить файл",
+    titleLabel: "Название",
+    mediaType: "Тип медиа",
+    category: "Категория",
+    tags: "Теги (через запятую)",
+    description: "Описание",
+    chooseFile: "Выбрать файл",
+    selectedFile: "Выбрано",
+    fileUrl: "Или URL файла (http/https)",
+    afterUpload: "После загрузки",
+    sendToCheck: "Отправить на автопроверку",
+    keepUploaded: "Оставить как загружено",
+    submit: "Отправить",
+  },
+} as const;
+
+export function UploadPage({ language }: UploadPageProps) {
+  const t = copy[language];
   const navigate = useNavigate();
   const { token } = useAuth();
   const [title, setTitle] = useState("");
@@ -33,7 +75,7 @@ export function UploadPage() {
   async function submit() {
     if (!token) return;
     if (!file && !fileUrl.trim()) {
-      setError("Choose file or provide URL");
+      setError(t.chooseFileOrUrl);
       return;
     }
 
@@ -60,81 +102,110 @@ export function UploadPage() {
       }
       navigate("/dashboard");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Upload failed");
+      setError(submitError instanceof Error ? submitError.message : t.uploadFailed);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Card sx={{ borderRadius: 3, maxWidth: 720 }}>
-      <CardContent>
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
-          Upload media
-        </Typography>
+    <Stack spacing={2}>
+      <Typography variant="h2">{t.title}</Typography>
+      <Paper
+        sx={{
+          p: { xs: 2, md: 3 },
+          borderRadius: "20px",
+          overflow: "hidden",
+        }}
+      >
         <Stack spacing={2}>
           {error && <Alert severity="error">{error}</Alert>}
-          <TextField
-            label="Title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-          <TextField
-            label="Description"
-            multiline
-            minRows={3}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-          <TextField
-            label="Category"
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-          />
-          <TextField
-            label="Tags (comma separated)"
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-          />
-          <TextField
-            select
-            label="Media type"
-            value={type}
-            onChange={(event) => setType(event.target.value as MediaType)}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+              gap: 2,
+            }}
           >
-            {mediaTypes.map((option) => (
-              <MenuItem key={option} value={option}>
-                {option}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Button component="label" variant="outlined">
-            {file ? `Selected: ${file.name}` : "Choose file"}
-            <input
-              hidden
-              type="file"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            <TextField
+              label={t.titleLabel}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              fullWidth
             />
-          </Button>
-          <TextField
-            label="Or file URL (http/https)"
-            value={fileUrl}
-            onChange={(event) => setFileUrl(event.target.value)}
-          />
-          <TextField
-            select
-            label="After upload"
-            value={sendForCheck ? "check" : "draft"}
-            onChange={(event) => setSendForCheck(event.target.value === "check")}
+            <TextField
+              select
+              label={t.mediaType}
+              value={type}
+              onChange={(event) => setType(event.target.value as MediaType)}
+              fullWidth
+            >
+              {mediaTypes.map((option) => (
+                <MenuItem key={option} value={option}>
+                  {option}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label={t.category}
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              fullWidth
+            />
+            <TextField
+              label={t.tags}
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              fullWidth
+            />
+            <TextField
+              label={t.description}
+              multiline
+              minRows={5}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              fullWidth
+              sx={{ gridColumn: { md: "1 / -1" } }}
+            />
+            <Button
+              component="label"
+              variant="outlined"
+              sx={{ minHeight: 56, justifyContent: "flex-start" }}
+            >
+              {file ? `${t.selectedFile}: ${file.name}` : t.chooseFile}
+              <input
+                hidden
+                type="file"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+            </Button>
+            <TextField
+              label={t.fileUrl}
+              value={fileUrl}
+              onChange={(event) => setFileUrl(event.target.value)}
+              fullWidth
+            />
+            <TextField
+              select
+              label={t.afterUpload}
+              value={sendForCheck ? "check" : "draft"}
+              onChange={(event) => setSendForCheck(event.target.value === "check")}
+              fullWidth
+            >
+              <MenuItem value="check">{t.sendToCheck}</MenuItem>
+              <MenuItem value="draft">{t.keepUploaded}</MenuItem>
+            </TextField>
+          </Box>
+          <Button
+            variant="contained"
+            onClick={submit}
+            disabled={submitting}
+            sx={{ alignSelf: "flex-start", minWidth: 220 }}
           >
-            <MenuItem value="check">Send to automatic check</MenuItem>
-            <MenuItem value="draft">Keep as uploaded</MenuItem>
-          </TextField>
-          <Button variant="contained" onClick={submit} disabled={submitting}>
-            Submit
+            {t.submit}
           </Button>
         </Stack>
-      </CardContent>
-    </Card>
+      </Paper>
+    </Stack>
   );
 }

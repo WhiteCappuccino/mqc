@@ -1,14 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Alert, Box, Button, Chip, Container, Paper, Stack, TextField, Typography } from "@mui/material";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
@@ -36,10 +27,46 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
-export function RegisterPage() {
+interface RegisterPageProps {
+  language: "en" | "ru";
+}
+
+const copy = {
+  en: {
+    access: "access",
+    title: "Register",
+    description:
+      "Create an account for uploads, moderation, audit history, and shared collections.",
+    haveAccount: "Already have an account",
+    fullName: "Full name",
+    username: "Username",
+    email: "Email",
+    password: "Password",
+    confirmPassword: "Confirm password",
+    submit: "Register",
+    failed: "Registration failed",
+  },
+  ru: {
+    access: "доступ",
+    title: "Регистрация",
+    description:
+      "Создайте аккаунт для загрузок, модерации, истории аудита и общих коллекций.",
+    haveAccount: "Уже есть аккаунт",
+    fullName: "Полное имя",
+    username: "Имя пользователя",
+    email: "Эл. почта",
+    password: "Пароль",
+    confirmPassword: "Подтвердите пароль",
+    submit: "Зарегистрироваться",
+    failed: "Не удалось зарегистрироваться",
+  },
+} as const;
+
+export function RegisterPage({ language }: RegisterPageProps) {
   const navigate = useNavigate();
   const { register: registerAccount } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const t = copy[language];
 
   const {
     register,
@@ -60,76 +87,91 @@ export function RegisterPage() {
       });
       navigate("/dashboard");
     } catch (submitError) {
-      setError(
-        submitError instanceof Error ? submitError.message : "Registration failed",
-      );
+      setError(submitError instanceof Error ? submitError.message : t.failed);
     }
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        background:
-          "radial-gradient(circle at 85% 20%, #bbf7d0 0%, #dbeafe 50%, #f8fafc 100%)",
-      }}
-    >
-      <Card sx={{ width: 420, borderRadius: 3, boxShadow: 8 }}>
-        <CardContent>
-          <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
-            Create Account
-          </Typography>
-          <Typography color="text.secondary" sx={{ mb: 3 }}>
-            Get access to media checks and moderation
-          </Typography>
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <Stack spacing={2}>
-              {error && <Alert severity="error">{error}</Alert>}
-              <TextField
-                label="Full name"
-                {...register("fullName")}
-                error={Boolean(errors.fullName)}
-                helperText={errors.fullName?.message}
-              />
-              <TextField
-                label="Username"
-                {...register("username")}
-                error={Boolean(errors.username)}
-                helperText={errors.username?.message}
-              />
-              <TextField
-                label="Email"
-                type="email"
-                {...register("email")}
-                error={Boolean(errors.email)}
-                helperText={errors.email?.message}
-              />
-              <TextField
-                label="Password"
-                type="password"
-                {...register("password")}
-                error={Boolean(errors.password)}
-                helperText={errors.password?.message}
-              />
-              <TextField
-                label="Confirm password"
-                type="password"
-                {...register("confirmPassword")}
-                error={Boolean(errors.confirmPassword)}
-                helperText={errors.confirmPassword?.message}
-              />
-              <Button type="submit" variant="contained" disabled={isSubmitting}>
-                Register
+    <Box sx={{ minHeight: "100vh", py: { xs: 1.5, md: 2.5 } }}>
+      <Container>
+        <Paper sx={{ p: { xs: 2, md: 3 }, backgroundColor: "background.paper" }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", lg: "0.92fr 1.08fr" },
+              gap: 2,
+            }}
+          >
+            <Paper
+              sx={{
+                p: { xs: 2.5, md: 4 },
+                backgroundColor: "#c7f0d8",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+              }}
+            >
+              <Stack spacing={2}>
+                <Chip label={t.access} size="small" sx={{ alignSelf: "flex-start" }} />
+                <Typography variant="h2">{t.title}</Typography>
+                <Typography>{t.description}</Typography>
+              </Stack>
+              <Button
+                component={Link}
+                to="/login"
+                variant="outlined"
+                sx={{ alignSelf: "flex-start", mt: 3 }}
+              >
+                {t.haveAccount}
               </Button>
-              <Button component={Link} to="/login">
-                Already have an account
-              </Button>
-            </Stack>
-          </form>
-        </CardContent>
-      </Card>
+            </Paper>
+
+            <Paper sx={{ p: { xs: 2.5, md: 4 } }}>
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <Stack spacing={2}>
+                  {error && <Alert severity="error">{error}</Alert>}
+                  <TextField
+                    label={t.fullName}
+                    {...register("fullName")}
+                    error={Boolean(errors.fullName)}
+                    helperText={errors.fullName?.message}
+                  />
+                  <TextField
+                    label={t.username}
+                    {...register("username")}
+                    error={Boolean(errors.username)}
+                    helperText={errors.username?.message}
+                  />
+                  <TextField
+                    label={t.email}
+                    type="email"
+                    {...register("email")}
+                    error={Boolean(errors.email)}
+                    helperText={errors.email?.message}
+                  />
+                  <TextField
+                    label={t.password}
+                    type="password"
+                    {...register("password")}
+                    error={Boolean(errors.password)}
+                    helperText={errors.password?.message}
+                  />
+                  <TextField
+                    label={t.confirmPassword}
+                    type="password"
+                    {...register("confirmPassword")}
+                    error={Boolean(errors.confirmPassword)}
+                    helperText={errors.confirmPassword?.message}
+                  />
+                  <Button type="submit" variant="contained" disabled={isSubmitting}>
+                    {t.submit}
+                  </Button>
+                </Stack>
+              </form>
+            </Paper>
+          </Box>
+        </Paper>
+      </Container>
     </Box>
   );
 }

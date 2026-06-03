@@ -15,7 +15,7 @@ describe("LoginPage", () => {
   it("renders and validates form", async () => {
     render(
       <MemoryRouter>
-        <LoginPage />
+        <LoginPage language="en" />
       </MemoryRouter>,
     );
 

@@ -28,8 +28,122 @@ const mediaStatuses: MediaStatus[] = [
   "ARCHIVED",
 ];
 
-export function AdminPage() {
+interface AdminPageProps {
+  language: "en" | "ru";
+}
+
+const copy = {
+  en: {
+    loading: "Loading...",
+    title: "Admin Console",
+    loadError: "Failed to load admin data",
+    downloadError: "Download failed",
+    deleteSuccess: "Media removed",
+    deleteError: "Failed to delete media",
+    roleUpdated: "User role updated",
+    roleError: "Failed to update role",
+    statusUpdated: "User status updated",
+    statusError: "Failed to update status",
+    criterionSaved: "Criterion upserted",
+    criterionError: "Failed to save criterion",
+    violationSaved: "Violation dictionary item upserted",
+    violationError: "Failed to save violation",
+    settingSaved: "Setting saved",
+    settingError: "Failed to save setting",
+    mediaStatusUpdated: "Media status updated",
+    mediaStatusError: "Failed to update media status",
+    reports: "Reports",
+    dateFrom: "Date from",
+    dateTo: "Date to",
+    analytics: "Analytics Overview",
+    checked: "Checked materials",
+    rejected: "Rejected materials",
+    avgModeration: "Avg moderation time (min)",
+    falsePositiveRate: "False positive rate",
+    noAnalytics: "No analytics data",
+    deleteMedia: "Delete media",
+    mediaId: "Media ID",
+    delete: "Delete",
+    users: "Users and Roles",
+    role: "Role",
+    block: "Block",
+    activate: "Activate",
+    qualityCriteria: "Quality Criteria",
+    code: "Code",
+    name: "Name",
+    weight: "Weight",
+    upsert: "Upsert",
+    active: "active",
+    inactive: "inactive",
+    violationDictionary: "Violation Dictionary",
+    severity: "Severity",
+    systemSettings: "System Settings",
+    key: "Key",
+    value: "Value",
+    save: "Save",
+    publishMedia: "Update media status",
+    status: "Status",
+    reason: "Reason",
+    apply: "Apply",
+  },
+  ru: {
+    loading: "Загрузка...",
+    title: "Админ-панель",
+    loadError: "Не удалось загрузить админ-данные",
+    downloadError: "Не удалось скачать отчет",
+    deleteSuccess: "Медиа удалено",
+    deleteError: "Не удалось удалить медиа",
+    roleUpdated: "Роль пользователя обновлена",
+    roleError: "Не удалось обновить роль",
+    statusUpdated: "Статус пользователя обновлен",
+    statusError: "Не удалось обновить статус",
+    criterionSaved: "Критерий сохранен",
+    criterionError: "Не удалось сохранить критерий",
+    violationSaved: "Элемент словаря нарушений сохранен",
+    violationError: "Не удалось сохранить нарушение",
+    settingSaved: "Настройка сохранена",
+    settingError: "Не удалось сохранить настройку",
+    mediaStatusUpdated: "Статус медиа обновлен",
+    mediaStatusError: "Не удалось обновить статус медиа",
+    reports: "Отчеты",
+    dateFrom: "Дата от",
+    dateTo: "Дата до",
+    analytics: "Обзор аналитики",
+    checked: "Проверено материалов",
+    rejected: "Отклонено материалов",
+    avgModeration: "Среднее время модерации (мин)",
+    falsePositiveRate: "Доля ложных срабатываний",
+    noAnalytics: "Нет данных аналитики",
+    deleteMedia: "Удалить медиа",
+    mediaId: "ID медиа",
+    delete: "Удалить",
+    users: "Пользователи и роли",
+    role: "Роль",
+    block: "Заблокировать",
+    activate: "Активировать",
+    qualityCriteria: "Критерии качества",
+    code: "Код",
+    name: "Название",
+    weight: "Вес",
+    upsert: "Сохранить",
+    active: "активен",
+    inactive: "неактивен",
+    violationDictionary: "Словарь нарушений",
+    severity: "Критичность",
+    systemSettings: "Системные настройки",
+    key: "Ключ",
+    value: "Значение",
+    save: "Сохранить",
+    publishMedia: "Обновить статус медиа",
+    status: "Статус",
+    reason: "Причина",
+    apply: "Применить",
+  },
+} as const;
+
+export function AdminPage({ language }: AdminPageProps) {
   const { token } = useAuth();
+  const t = copy[language];
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,7 +214,7 @@ export function AdminPage() {
       setAnalytics(analyticsData);
       setAuditLogs((logsData as typeof auditLogs).slice(0, 30));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load admin data");
+      setError(loadError instanceof Error ? loadError.message : t.loadError);
     } finally {
       setLoading(false);
     }
@@ -131,7 +245,7 @@ export function AdminPage() {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : "Download failed");
+      setError(downloadError instanceof Error ? downloadError.message : t.downloadError);
     }
   }
 
@@ -141,10 +255,10 @@ export function AdminPage() {
     try {
       await api.adminDeleteMedia(deleteMediaId.trim(), token);
       setDeleteMediaId("");
-      setSuccess("Media removed");
+      setSuccess(t.deleteSuccess);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to delete media");
+      setError(actionError instanceof Error ? actionError.message : t.deleteError);
     }
   }
 
@@ -153,10 +267,10 @@ export function AdminPage() {
     setError(null);
     try {
       await api.adminUpdateUserRole(userId, role, token);
-      setSuccess("User role updated");
+      setSuccess(t.roleUpdated);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to update role");
+      setError(actionError instanceof Error ? actionError.message : t.roleError);
     }
   }
 
@@ -165,10 +279,10 @@ export function AdminPage() {
     setError(null);
     try {
       await api.adminUpdateUserStatus(userId, isActive, token);
-      setSuccess("User status updated");
+      setSuccess(t.statusUpdated);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to update status");
+      setError(actionError instanceof Error ? actionError.message : t.statusError);
     }
   }
 
@@ -187,10 +301,10 @@ export function AdminPage() {
         token,
       );
       setNewCriterion({ code: "", name: "", description: "", weight: 1, isActive: true });
-      setSuccess("Criterion upserted");
+      setSuccess(t.criterionSaved);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to save criterion");
+      setError(actionError instanceof Error ? actionError.message : t.criterionError);
     }
   }
 
@@ -215,10 +329,10 @@ export function AdminPage() {
         defaultSeverity: "MEDIUM",
         isActive: true,
       });
-      setSuccess("Violation dictionary item upserted");
+      setSuccess(t.violationSaved);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to save violation");
+      setError(actionError instanceof Error ? actionError.message : t.violationError);
     }
   }
 
@@ -235,10 +349,10 @@ export function AdminPage() {
         token,
       );
       setNewSetting({ key: "", value: "", description: "" });
-      setSuccess("Setting saved");
+      setSuccess(t.settingSaved);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to save setting");
+      setError(actionError instanceof Error ? actionError.message : t.settingError);
     }
   }
 
@@ -255,21 +369,21 @@ export function AdminPage() {
         token,
       );
       setMediaStatusForm((prev) => ({ ...prev, mediaId: "", reason: "" }));
-      setSuccess("Media status updated");
+      setSuccess(t.mediaStatusUpdated);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Failed to update media status");
+      setError(actionError instanceof Error ? actionError.message : t.mediaStatusError);
     }
   }
 
   if (loading) {
-    return <Typography>Loading...</Typography>;
+    return <Typography>{t.loading}</Typography>;
   }
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Admin Console
+      <Typography variant="h2">
+        {t.title}
       </Typography>
       {error && <Alert severity="error">{error}</Alert>}
       {success && <Alert severity="success">{success}</Alert>}
@@ -277,13 +391,13 @@ export function AdminPage() {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Reports
+            {t.reports}
           </Typography>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1 }}>
             <TextField
               size="small"
               type="date"
-              label="Date from"
+              label={t.dateFrom}
               value={reportDateFrom}
               onChange={(event) => setReportDateFrom(event.target.value)}
               slotProps={{ inputLabel: { shrink: true } }}
@@ -291,7 +405,7 @@ export function AdminPage() {
             <TextField
               size="small"
               type="date"
-              label="Date to"
+              label={t.dateTo}
               value={reportDateTo}
               onChange={(event) => setReportDateTo(event.target.value)}
               slotProps={{ inputLabel: { shrink: true } }}
@@ -314,21 +428,21 @@ export function AdminPage() {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Analytics Overview
+            {t.analytics}
           </Typography>
           {analytics ? (
             <Stack spacing={0.5}>
-              <Typography variant="body2">Checked materials: {analytics.checkedCount}</Typography>
-              <Typography variant="body2">Rejected materials: {analytics.rejectedCount}</Typography>
+              <Typography variant="body2">{t.checked}: {analytics.checkedCount}</Typography>
+              <Typography variant="body2">{t.rejected}: {analytics.rejectedCount}</Typography>
               <Typography variant="body2">
-                Avg moderation time (min): {analytics.avgModerationMinutes}
+                {t.avgModeration}: {analytics.avgModerationMinutes}
               </Typography>
               <Typography variant="body2">
-                False positive rate: {analytics.falsePositiveRate}
+                {t.falsePositiveRate}: {analytics.falsePositiveRate}
               </Typography>
             </Stack>
           ) : (
-            <Typography color="text.secondary">No analytics data</Typography>
+            <Typography color="text.secondary">{t.noAnalytics}</Typography>
           )}
         </CardContent>
       </Card>
