@@ -12,8 +12,8 @@ export class FavoritesService {
   constructor(private readonly prisma: PrismaService) {}
 
   list(user: JwtPayload) {
-    return this.prisma.favorite.findMany({
-      where: { userId: user.sub },
+    return this.prisma.mediaAccess.findMany({
+      where: { userId: user.sub, isFavorite: true },
       include: {
         mediaItem: {
           include: {
@@ -25,7 +25,7 @@ export class FavoritesService {
           },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { favoritedAt: "desc" },
     });
   }
 
@@ -35,28 +35,50 @@ export class FavoritesService {
       include: { access: true },
     });
     if (!media) throw new NotFoundException("Media not found");
-    this.assertCanReadMedia(media.ownerId, media.access.map((entry) => entry.userId), user);
+    this.assertCanReadMedia(
+      media.ownerId,
+      media.access.filter((entry) => entry.isShared).map((entry) => entry.userId),
+      user,
+    );
 
-    return this.prisma.favorite.upsert({
+    return this.prisma.mediaAccess.upsert({
       where: {
-        userId_mediaItemId: {
-          userId: user.sub,
+        mediaItemId_userId: {
           mediaItemId: mediaId,
+          userId: user.sub,
         },
       },
-      update: {},
+      update: {
+        isFavorite: true,
+        favoritedAt: new Date(),
+      },
       create: {
         userId: user.sub,
         mediaItemId: mediaId,
+        isShared: false,
+        isFavorite: true,
+        favoritedAt: new Date(),
       },
     });
   }
 
   async remove(mediaId: string, user: JwtPayload) {
-    await this.prisma.favorite.deleteMany({
+    await this.prisma.mediaAccess.updateMany({
       where: {
         userId: user.sub,
         mediaItemId: mediaId,
+        isShared: true,
+      },
+      data: {
+        isFavorite: false,
+        favoritedAt: null,
+      },
+    });
+    await this.prisma.mediaAccess.deleteMany({
+      where: {
+        userId: user.sub,
+        mediaItemId: mediaId,
+        isShared: false,
       },
     });
     return { ok: true };
@@ -69,4 +91,3 @@ export class FavoritesService {
     throw new ForbiddenException("Access denied");
   }
 }
-

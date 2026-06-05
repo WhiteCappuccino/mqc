@@ -80,6 +80,21 @@ enum NotificationChannel {
   EMAIL
 }
 
+enum AuthTokenType {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+
+enum TaxonomyKind {
+  CATEGORY
+  TAG
+}
+
+enum QualityRuleKind {
+  CRITERION
+  VIOLATION
+}
+
 model User {
   id                     String                  @id @default(cuid())
   email                  String                  @unique
@@ -98,12 +113,9 @@ model User {
   decisions              ModerationDecision[]
   falsePositiveMarkedViolations Violation[]   @relation("ViolationFalsePositiveMarker")
   mediaRevisionsCreated  MediaRevision[]      @relation("MediaRevisionCreator")
-  loginHistory           LoginHistory[]
-  passwordResetTokens    PasswordResetToken[]
-  emailVerificationTokens EmailVerificationToken[]
+  authTokens             AuthToken[]
   collectionsOwned       Collection[]            @relation("CollectionOwner")
   collectionCollaborator CollectionCollaborator[]
-  favorites              Favorite[]
   mediaAccess            MediaAccess[]
   comments               Comment[]
   notifications          Notification[]
@@ -111,56 +123,38 @@ model User {
   systemSettingsUpdated  SystemSetting[]
 }
 
-model LoginHistory {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ipAddress String?
-  userAgent String?
-  success   Boolean
-  createdAt DateTime @default(now())
-}
-
-model PasswordResetToken {
+model AuthToken {
   id        String    @id @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AuthTokenType
   token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+
+  @@index([userId, type])
 }
 
-model EmailVerificationToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-}
-
-model Category {
+model TaxonomyEntry {
   id          String      @id @default(cuid())
-  name        String      @unique
+  kind        TaxonomyKind
+  name        String
   description String?
-  mediaItems  MediaItem[]
+  mediaCategories MediaItem[] @relation("MediaCategory")
+  mediaLinks  MediaTaxonomy[]
+
+  @@unique([kind, name])
+  @@index([kind])
 }
 
-model Tag {
-  id          String    @id @default(cuid())
-  name        String    @unique
-  mediaLinks  MediaTag[]
-}
-
-model MediaTag {
+model MediaTaxonomy {
   mediaItemId String
-  tagId       String
+  taxonomyEntryId String
   mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tag         TaxonomyEntry @relation(fields: [taxonomyEntryId], references: [id], onDelete: Cascade)
 
-  @@id([mediaItemId, tagId])
+  @@id([mediaItemId, taxonomyEntryId])
 }
 
 model MediaItem {
@@ -178,18 +172,17 @@ model MediaItem {
   ownerId         String
   owner           User                   @relation(fields: [ownerId], references: [id])
   categoryId      String?
-  category        Category?              @relation(fields: [categoryId], references: [id])
+  category        TaxonomyEntry?         @relation("MediaCategory", fields: [categoryId], references: [id])
   version         Int                    @default(1)
   publishedAt     DateTime?
   archivedAt      DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
-  tags            MediaTag[]
+  tags            MediaTaxonomy[]
   qualityChecks   QualityCheck[]
   violations      Violation[]
   decisions       ModerationDecision[]
   comments        Comment[]
-  favorites       Favorite[]
   collectionItems CollectionItem[]
   access          MediaAccess[]
   revisions       MediaRevision[]
@@ -197,15 +190,20 @@ model MediaItem {
   @@index([checksum])
 }
 
-model QualityCriterion {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  description String?
-  isActive    Boolean  @default(true)
-  weight      Float    @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model QualityRule {
+  id              String             @id @default(cuid())
+  kind            QualityRuleKind
+  code            String             @unique
+  name            String
+  description     String?
+  isActive        Boolean            @default(true)
+  weight          Float?
+  defaultSeverity ViolationSeverity?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  violations      Violation[]
+
+  @@index([kind])
 }
 
 model QualityCheck {
@@ -229,16 +227,6 @@ model QualityCheck {
   comments       Comment[]
 }
 
-model ViolationDictionary {
-  id              String             @id @default(cuid())
-  code            String             @unique
-  name            String
-  description     String?
-  defaultSeverity ViolationSeverity  @default(MEDIUM)
-  isActive        Boolean            @default(true)
-  violations      Violation[]
-}
-
 model Violation {
   id                String             @id @default(cuid())
   mediaItemId       String
@@ -246,7 +234,7 @@ model Violation {
   qualityCheckId    String?
   qualityCheck      QualityCheck?      @relation(fields: [qualityCheckId], references: [id], onDelete: SetNull)
   dictionaryId      String?
-  dictionary        ViolationDictionary? @relation(fields: [dictionaryId], references: [id], onDelete: SetNull)
+  dictionary        QualityRule?      @relation(fields: [dictionaryId], references: [id], onDelete: SetNull)
   type              String
   description       String
   severity          ViolationSeverity
@@ -310,16 +298,6 @@ model CollectionCollaborator {
   @@unique([collectionId, userId])
 }
 
-model Favorite {
-  userId      String
-  mediaItemId String
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mediaItem   MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-
-  @@id([userId, mediaItemId])
-}
-
 model MediaAccess {
   id          String      @id @default(cuid())
   mediaItemId String
@@ -327,9 +305,14 @@ model MediaAccess {
   userId      String
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   level       AccessLevel @default(VIEW)
+  isShared    Boolean     @default(true)
+  isFavorite  Boolean     @default(false)
   createdAt   DateTime    @default(now())
+  favoritedAt DateTime?
 
   @@unique([mediaItemId, userId])
+  @@index([userId, isShared])
+  @@index([userId, isFavorite])
 }
 
 model Comment {

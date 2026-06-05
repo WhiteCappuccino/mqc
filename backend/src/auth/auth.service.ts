@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { NotificationType, User } from "@prisma/client";
+import { AuthTokenType, NotificationType, User } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { AuditService } from "../audit/audit.service";
@@ -52,9 +52,10 @@ export class AuthService {
     });
 
     const verifyToken = randomUUID();
-    await this.prisma.emailVerificationToken.create({
+    await this.prisma.authToken.create({
       data: {
         userId: user.id,
+        type: AuthTokenType.EMAIL_VERIFICATION,
         token: verifyToken,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
@@ -123,9 +124,10 @@ export class AuthService {
     }
 
     const token = randomUUID();
-    await this.prisma.passwordResetToken.create({
+    await this.prisma.authToken.create({
       data: {
         userId: user.id,
+        type: AuthTokenType.PASSWORD_RESET,
         token,
         expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       },
@@ -151,10 +153,15 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const tokenEntity = await this.prisma.passwordResetToken.findUnique({
+    const tokenEntity = await this.prisma.authToken.findUnique({
       where: { token: dto.token },
     });
-    if (!tokenEntity || tokenEntity.usedAt || tokenEntity.expiresAt < new Date()) {
+    if (
+      !tokenEntity ||
+      tokenEntity.type !== AuthTokenType.PASSWORD_RESET ||
+      tokenEntity.usedAt ||
+      tokenEntity.expiresAt < new Date()
+    ) {
       throw new BadRequestException("Invalid reset token");
     }
 
@@ -164,7 +171,7 @@ export class AuthService {
         where: { id: tokenEntity.userId },
         data: { passwordHash },
       }),
-      this.prisma.passwordResetToken.update({
+      this.prisma.authToken.update({
         where: { id: tokenEntity.id },
         data: { usedAt: new Date() },
       }),
@@ -182,10 +189,15 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
-    const tokenEntity = await this.prisma.emailVerificationToken.findUnique({
+    const tokenEntity = await this.prisma.authToken.findUnique({
       where: { token: dto.token },
     });
-    if (!tokenEntity || tokenEntity.usedAt || tokenEntity.expiresAt < new Date()) {
+    if (
+      !tokenEntity ||
+      tokenEntity.type !== AuthTokenType.EMAIL_VERIFICATION ||
+      tokenEntity.usedAt ||
+      tokenEntity.expiresAt < new Date()
+    ) {
       throw new BadRequestException("Invalid verification token");
     }
 
@@ -194,7 +206,7 @@ export class AuthService {
         where: { id: tokenEntity.userId },
         data: { emailVerified: true },
       }),
-      this.prisma.emailVerificationToken.update({
+      this.prisma.authToken.update({
         where: { id: tokenEntity.id },
         data: { usedAt: new Date() },
       }),

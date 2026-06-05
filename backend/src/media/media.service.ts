@@ -13,7 +13,9 @@ import {
   MediaStatus,
   MediaType,
   Prisma,
+  QualityRuleKind,
   Role,
+  TaxonomyKind,
   ViolationSeverity,
   ViolationSource,
 } from "@prisma/client";
@@ -92,7 +94,7 @@ export class MediaService {
         previewUrl: this.storageService.getPublicUrl(key),
         categoryId,
         tags: {
-          create: tagRecords.map((tag) => ({ tagId: tag.id })),
+          create: tagRecords.map((tag) => ({ taxonomyEntryId: tag.id })),
         },
       },
       include: {
@@ -184,7 +186,7 @@ export class MediaService {
           version: { increment: 1 },
           tags: tagRecords ? {
             deleteMany: {},
-            create: tagRecords.map((tag) => ({ tagId: tag.id })),
+            create: tagRecords.map((tag) => ({ taxonomyEntryId: tag.id })),
           } : undefined,
         },
         include: {
@@ -222,19 +224,26 @@ export class MediaService {
         tags: { include: { tag: true } },
         qualityChecks: { take: 1, orderBy: { createdAt: "desc" } },
         decisions: { take: 1, orderBy: { createdAt: "desc" } },
-        _count: { select: { favorites: true } },
+        _count: { select: { access: { where: { isFavorite: true } } } },
       },
     });
+    const mediaWithFavoriteCount = media.map((item) => ({
+      ...item,
+      _count: {
+        ...item._count,
+        favorites: item._count.access,
+      },
+    }));
 
     if (query.sortBy === "quality") {
-      return media.sort(
+      return mediaWithFavoriteCount.sort(
         (a, b) => (b.qualityChecks[0]?.finalScore ?? 0) - (a.qualityChecks[0]?.finalScore ?? 0),
       );
     }
     if (query.sortBy === "popularity") {
-      return media.sort((a, b) => b._count.favorites - a._count.favorites);
+      return mediaWithFavoriteCount.sort((a, b) => b._count.favorites - a._count.favorites);
     }
-    return media;
+    return mediaWithFavoriteCount;
   }
 
   async getById(id: string, user: JwtPayload) {
@@ -257,6 +266,7 @@ export class MediaService {
           orderBy: { createdAt: "desc" },
         },
         access: {
+          where: { isShared: true },
           include: {
             user: { select: { id: true, fullName: true, username: true, email: true } },
           },
@@ -284,8 +294,8 @@ export class MediaService {
     if (!media) throw new NotFoundException("Media not found");
     await this.assertCanEditMedia(media.id, user);
 
-    const criteria = await this.prisma.qualityCriterion.findMany({
-      where: { isActive: true },
+    const criteria = await this.prisma.qualityRule.findMany({
+      where: { kind: QualityRuleKind.CRITERION, isActive: true },
       orderBy: { code: "asc" },
     });
 
@@ -398,11 +408,12 @@ export class MediaService {
           userId: user.id,
         },
       },
-      update: { level: payload.level },
+      update: { level: payload.level, isShared: true },
       create: {
         mediaItemId: mediaId,
         userId: user.id,
         level: payload.level,
+        isShared: true,
       },
     });
 
@@ -436,6 +447,18 @@ export class MediaService {
       where: {
         mediaItemId: mediaId,
         userId,
+        isFavorite: false,
+      },
+    });
+    await this.prisma.mediaAccess.updateMany({
+      where: {
+        mediaItemId: mediaId,
+        userId,
+        isFavorite: true,
+      },
+      data: {
+        isShared: false,
+        level: AccessLevel.VIEW,
       },
     });
 
@@ -514,10 +537,15 @@ export class MediaService {
 
   private async resolveCategoryId(category?: string | null) {
     if (!category?.trim()) return null;
-    const entity = await this.prisma.category.upsert({
-      where: { name: category.trim() },
+    const entity = await this.prisma.taxonomyEntry.upsert({
+      where: {
+        kind_name: {
+          kind: TaxonomyKind.CATEGORY,
+          name: category.trim(),
+        },
+      },
       update: {},
-      create: { name: category.trim() },
+      create: { kind: TaxonomyKind.CATEGORY, name: category.trim() },
     });
     return entity.id;
   }
@@ -529,10 +557,15 @@ export class MediaService {
         .map((tag) => tag.trim().toLowerCase())
         .filter(Boolean)
         .map((tag) =>
-          this.prisma.tag.upsert({
-            where: { name: tag },
+          this.prisma.taxonomyEntry.upsert({
+            where: {
+              kind_name: {
+                kind: TaxonomyKind.TAG,
+                name: tag,
+              },
+            },
             update: {},
-            create: { name: tag },
+            create: { kind: TaxonomyKind.TAG, name: tag },
           }),
         ),
     );
@@ -550,7 +583,7 @@ export class MediaService {
     const where: Prisma.MediaItemWhereInput = {};
 
     if (user.role === Role.USER) {
-      where.OR = [{ ownerId: user.sub }, { access: { some: { userId: user.sub } } }];
+      where.OR = [{ ownerId: user.sub }, { access: { some: { userId: user.sub, isShared: true } } }];
     }
 
     if (query.q) {
@@ -565,7 +598,16 @@ export class MediaService {
           OR: [
             { title: { contains: query.q, mode: "insensitive" } },
             { owner: { fullName: { contains: query.q, mode: "insensitive" } } },
-            { tags: { some: { tag: { name: { contains: query.q, mode: "insensitive" } } } } },
+            {
+              tags: {
+                some: {
+                  tag: {
+                    kind: TaxonomyKind.TAG,
+                    name: { contains: query.q, mode: "insensitive" },
+                  },
+                },
+              },
+            },
           ],
         },
       ];
@@ -610,8 +652,8 @@ export class MediaService {
     const dedupedCodes = [...new Set(violationCodes.map((code) => code.trim()).filter(Boolean))];
     for (const code of dedupedCodes) {
       const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
-      const dictionary = await this.prisma.violationDictionary.findUnique({
-        where: { code: normalizedCode },
+      const dictionary = await this.prisma.qualityRule.findFirst({
+        where: { code: normalizedCode, kind: QualityRuleKind.VIOLATION },
       });
       await this.prisma.violation.create({
         data: {
@@ -637,7 +679,9 @@ export class MediaService {
     });
     if (!media) throw new NotFoundException("Media not found");
 
-    const hasAccess = media.ownerId === user.sub || media.access.some((access) => access.userId === user.sub);
+    const hasAccess =
+      media.ownerId === user.sub ||
+      media.access.some((access) => access.userId === user.sub && access.isShared);
     if (!hasAccess) {
       throw new ForbiddenException("Access denied");
     }
@@ -653,7 +697,7 @@ export class MediaService {
     if (!media) throw new NotFoundException("Media not found");
     if (media.ownerId === user.sub) return;
 
-    const access = media.access.find((a) => a.userId === user.sub);
+    const access = media.access.find((a) => a.userId === user.sub && a.isShared);
     if (!access || access.level === AccessLevel.VIEW || access.level === AccessLevel.COMMENT) {
       throw new ForbiddenException("Edit access denied");
     }

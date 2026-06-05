@@ -1,6 +1,6 @@
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
-import { Role } from "@prisma/client";
+import { AuthTokenType, Role } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -22,10 +22,12 @@ describe("AuthService", () => {
       findByUsername: jest.fn(),
       create: jest.fn(),
       findById: jest.fn(),
+      countRecentFailedLogins: jest.fn(),
+      createLoginHistory: jest.fn(),
     } as unknown as jest.Mocked<UsersService>;
 
     prisma = {
-      emailVerificationToken: {
+      authToken: {
         create: jest.fn(),
       },
     } as unknown as jest.Mocked<PrismaService>;
@@ -84,7 +86,13 @@ describe("AuthService", () => {
     expect(response.accessToken).toBe("token");
     expect(response.email).toBe("user@example.com");
     expect(response.username).toBe("user1");
-    expect(prisma.emailVerificationToken.create).toHaveBeenCalled();
+    expect(prisma.authToken.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: AuthTokenType.EMAIL_VERIFICATION,
+        }),
+      }),
+    );
     expect(jwtService.sign).toHaveBeenCalled();
   });
 });

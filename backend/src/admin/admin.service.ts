@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { MediaStatus, Role } from "@prisma/client";
+import { MediaStatus, QualityRuleKind, Role } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
 import { JwtPayload } from "../auth/jwt-payload.interface";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -51,21 +51,25 @@ export class AdminService {
   }
 
   listQualityCriteria() {
-    return this.prisma.qualityCriterion.findMany({
+    return this.prisma.qualityRule.findMany({
+      where: { kind: QualityRuleKind.CRITERION },
       orderBy: { code: "asc" },
     });
   }
 
   async upsertQualityCriterion(dto: UpsertQualityCriterionDto, actor: JwtPayload) {
-    const criterion = await this.prisma.qualityCriterion.upsert({
+    const criterion = await this.prisma.qualityRule.upsert({
       where: { code: dto.code.toUpperCase() },
       update: {
+        kind: QualityRuleKind.CRITERION,
         name: dto.name,
         description: dto.description,
         weight: dto.weight ?? 1,
+        defaultSeverity: null,
         isActive: dto.isActive ?? true,
       },
       create: {
+        kind: QualityRuleKind.CRITERION,
         code: dto.code.toUpperCase(),
         name: dto.name,
         description: dto.description,
@@ -84,21 +88,25 @@ export class AdminService {
   }
 
   listViolationDictionary() {
-    return this.prisma.violationDictionary.findMany({
+    return this.prisma.qualityRule.findMany({
+      where: { kind: QualityRuleKind.VIOLATION },
       orderBy: { code: "asc" },
     });
   }
 
   async upsertViolationDictionary(dto: UpsertViolationDictionaryDto, actor: JwtPayload) {
-    const entry = await this.prisma.violationDictionary.upsert({
+    const entry = await this.prisma.qualityRule.upsert({
       where: { code: dto.code.toUpperCase() },
       update: {
+        kind: QualityRuleKind.VIOLATION,
         name: dto.name,
         description: dto.description,
+        weight: null,
         defaultSeverity: dto.defaultSeverity,
         isActive: dto.isActive ?? true,
       },
       create: {
+        kind: QualityRuleKind.VIOLATION,
         code: dto.code.toUpperCase(),
         name: dto.name,
         description: dto.description,

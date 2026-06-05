@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, Role, User } from "@prisma/client";
+import { Prisma, QualityRuleKind, Role, User } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -124,20 +124,34 @@ export class UsersService {
   }
 
   createLoginHistory(userId: string, success: boolean, ipAddress?: string, userAgent?: string) {
-    return this.prisma.loginHistory.create({
+    return this.prisma.auditLog.create({
       data: {
-        userId,
-        success,
-        ipAddress,
-        userAgent,
+        actorId: userId,
+        action: "LOGIN_ATTEMPT",
+        entityType: "USER",
+        entityId: userId,
+        metadata: {
+          success,
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
       },
     });
   }
 
   countRecentFailedLogins(userId: string, minutes = 15) {
     const fromDate = new Date(Date.now() - minutes * 60 * 1000);
-    return this.prisma.loginHistory.count({
-      where: { userId, success: false, createdAt: { gte: fromDate } },
+    return this.prisma.auditLog.count({
+      where: {
+        actorId: userId,
+        action: "LOGIN_ATTEMPT",
+        entityType: "USER",
+        createdAt: { gte: fromDate },
+        metadata: {
+          path: ["success"],
+          equals: false,
+        },
+      },
     });
   }
 
@@ -165,10 +179,13 @@ export class UsersService {
       { code: "AUDIO_LOUDNESS", name: "Audio loudness", weight: 1 },
     ];
     for (const criterion of criteria) {
-      await this.prisma.qualityCriterion.upsert({
+      await this.prisma.qualityRule.upsert({
         where: { code: criterion.code },
         update: {},
-        create: criterion,
+        create: {
+          ...criterion,
+          kind: QualityRuleKind.CRITERION,
+        },
       });
     }
 
@@ -190,10 +207,13 @@ export class UsersService {
       },
     ];
     for (const violation of violations) {
-      await this.prisma.violationDictionary.upsert({
+      await this.prisma.qualityRule.upsert({
         where: { code: violation.code },
         update: {},
-        create: violation,
+        create: {
+          ...violation,
+          kind: QualityRuleKind.VIOLATION,
+        },
       });
     }
 

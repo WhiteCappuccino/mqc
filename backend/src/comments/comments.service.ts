@@ -211,7 +211,7 @@ export class CommentsService {
 
     if (user.role === Role.ADMIN || user.role === Role.MODERATOR) return;
     if (media.ownerId === user.sub) return;
-    if (media.access.some((entry) => entry.userId === user.sub)) return;
+    if (media.access.some((entry) => entry.userId === user.sub && entry.isShared)) return;
     throw new ForbiddenException("Access denied");
   }
 
