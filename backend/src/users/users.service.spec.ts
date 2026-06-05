@@ -1,5 +1,9 @@
 import { QualityRuleKind } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  QUALITY_CRITERION_TEMPLATES,
+  VIOLATION_DICTIONARY_TEMPLATES,
+} from "../quality/quality-rule-templates";
 import { UsersService } from "./users.service";
 
 describe("UsersService", () => {
@@ -63,7 +67,7 @@ describe("UsersService", () => {
     expect(prisma.qualityRule.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({
-          code: "IMG_RESOLUTION",
+          code: "IMAGE_RESOLUTION",
           kind: QualityRuleKind.CRITERION,
         }),
       }),
@@ -75,6 +79,17 @@ describe("UsersService", () => {
           kind: QualityRuleKind.VIOLATION,
         }),
       }),
+    );
+    expect(prisma.qualityRule.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          code: "LOW_SHARPNESS",
+          kind: QualityRuleKind.VIOLATION,
+        }),
+      }),
+    );
+    expect(prisma.qualityRule.upsert).toHaveBeenCalledTimes(
+      QUALITY_CRITERION_TEMPLATES.length + VIOLATION_DICTIONARY_TEMPLATES.length,
     );
   });
 });

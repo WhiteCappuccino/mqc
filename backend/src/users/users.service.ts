@@ -2,6 +2,10 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, QualityRuleKind, Role, User } from "@prisma/client";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  QUALITY_CRITERION_TEMPLATES,
+  VIOLATION_DICTIONARY_TEMPLATES,
+} from "../quality/quality-rule-templates";
 
 @Injectable()
 export class UsersService {
@@ -171,17 +175,17 @@ export class UsersService {
   }
 
   async ensureDefaultData() {
-    const criteria = [
-      { code: "IMG_RESOLUTION", name: "Image resolution", weight: 1 },
-      { code: "IMG_SHARPNESS", name: "Image sharpness", weight: 1 },
-      { code: "TEXT_PROFANITY", name: "Forbidden vocabulary", weight: 2 },
-      { code: "VIDEO_DURATION", name: "Video duration", weight: 1 },
-      { code: "AUDIO_LOUDNESS", name: "Audio loudness", weight: 1 },
-    ];
-    for (const criterion of criteria) {
+    for (const criterion of QUALITY_CRITERION_TEMPLATES) {
       await this.prisma.qualityRule.upsert({
         where: { code: criterion.code },
-        update: {},
+        update: {
+          kind: QualityRuleKind.CRITERION,
+          name: criterion.name,
+          description: criterion.description,
+          weight: criterion.weight,
+          defaultSeverity: null,
+          isActive: true,
+        },
         create: {
           ...criterion,
           kind: QualityRuleKind.CRITERION,
@@ -189,27 +193,17 @@ export class UsersService {
       });
     }
 
-    const violations = [
-      {
-        code: "LOW_RESOLUTION",
-        name: "Low resolution",
-        defaultSeverity: "MEDIUM" as const,
-      },
-      {
-        code: "BLUR",
-        name: "Blurred content",
-        defaultSeverity: "HIGH" as const,
-      },
-      {
-        code: "FORBIDDEN_CONTENT",
-        name: "Forbidden content",
-        defaultSeverity: "CRITICAL" as const,
-      },
-    ];
-    for (const violation of violations) {
+    for (const violation of VIOLATION_DICTIONARY_TEMPLATES) {
       await this.prisma.qualityRule.upsert({
         where: { code: violation.code },
-        update: {},
+        update: {
+          kind: QualityRuleKind.VIOLATION,
+          name: violation.name,
+          description: violation.description,
+          weight: null,
+          defaultSeverity: violation.defaultSeverity,
+          isActive: true,
+        },
         create: {
           ...violation,
           kind: QualityRuleKind.VIOLATION,

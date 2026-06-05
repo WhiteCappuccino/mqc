@@ -206,4 +206,4 @@ pytest -q
 ## Полезные ссылки
 
 - API: `http://localhost:3000/docs`
-- Доп. документация: [docs/api.md](docs/api.md), [docs/testing.md](docs/testing.md)
+- Доп. документация: [docs/api.md](docs/api.md), [docs/testing.md](docs/testing.md), [docs/check-templates.md](docs/check-templates.md)
