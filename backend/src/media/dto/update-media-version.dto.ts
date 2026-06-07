@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform } from "class-transformer";
 import { MediaType } from "@prisma/client";
 import {
   IsArray,
@@ -12,6 +13,7 @@ import {
 export class UpdateMediaVersionDto {
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
   @MaxLength(120)
   title?: string;

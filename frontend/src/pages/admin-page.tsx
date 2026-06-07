@@ -11,6 +11,13 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import {
+  formatMediaStatus,
+  formatRole,
+  formatSeverity,
+  formatViolationCode,
+  normalizeAppError,
+} from "../i18n/ui-text";
 import type { MediaStatus, UserRole, ViolationSeverity } from "../types/domain";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
@@ -85,6 +92,8 @@ const copy = {
     status: "Status",
     reason: "Reason",
     apply: "Apply",
+    auditLog: "Audit Log",
+    noLogs: "No logs yet",
   },
   ru: {
     loading: "Загрузка...",
@@ -138,6 +147,8 @@ const copy = {
     status: "Статус",
     reason: "Причина",
     apply: "Применить",
+    auditLog: "Журнал действий",
+    noLogs: "Записей пока нет",
   },
 } as const;
 
@@ -214,7 +225,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setAnalytics(analyticsData);
       setAuditLogs((logsData as typeof auditLogs).slice(0, 30));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t.loadError);
+      setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
       setLoading(false);
     }
@@ -245,7 +256,7 @@ export function AdminPage({ language }: AdminPageProps) {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : t.downloadError);
+      setError(normalizeAppError(downloadError, language, t.downloadError));
     }
   }
 
@@ -258,7 +269,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setSuccess(t.deleteSuccess);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.deleteError);
+      setError(normalizeAppError(actionError, language, t.deleteError));
     }
   }
 
@@ -270,7 +281,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setSuccess(t.roleUpdated);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.roleError);
+      setError(normalizeAppError(actionError, language, t.roleError));
     }
   }
 
@@ -282,7 +293,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setSuccess(t.statusUpdated);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.statusError);
+      setError(normalizeAppError(actionError, language, t.statusError));
     }
   }
 
@@ -304,7 +315,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setSuccess(t.criterionSaved);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.criterionError);
+      setError(normalizeAppError(actionError, language, t.criterionError));
     }
   }
 
@@ -332,7 +343,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setSuccess(t.violationSaved);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.violationError);
+      setError(normalizeAppError(actionError, language, t.violationError));
     }
   }
 
@@ -352,7 +363,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setSuccess(t.settingSaved);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.settingError);
+      setError(normalizeAppError(actionError, language, t.settingError));
     }
   }
 
@@ -372,7 +383,7 @@ export function AdminPage({ language }: AdminPageProps) {
       setSuccess(t.mediaStatusUpdated);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.mediaStatusError);
+      setError(normalizeAppError(actionError, language, t.mediaStatusError));
     }
   }
 
@@ -450,17 +461,17 @@ export function AdminPage({ language }: AdminPageProps) {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Delete media
+            {t.deleteMedia}
           </Typography>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <TextField
               size="small"
-              label="Media ID"
+              label={t.mediaId}
               value={deleteMediaId}
               onChange={(event) => setDeleteMediaId(event.target.value)}
             />
             <Button variant="contained" color="error" onClick={() => void deleteMedia()}>
-              Delete
+              {t.delete}
             </Button>
           </Stack>
         </CardContent>
@@ -469,7 +480,7 @@ export function AdminPage({ language }: AdminPageProps) {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Users and Roles
+            {t.users}
           </Typography>
           <Stack spacing={1}>
             {users.map((user) => (
@@ -485,7 +496,7 @@ export function AdminPage({ language }: AdminPageProps) {
                 <TextField
                   select
                   size="small"
-                  label="Role"
+                  label={t.role}
                   value={user.role}
                   onChange={(event) =>
                     void updateUserRole(user.id, event.target.value as UserRole)
@@ -494,7 +505,7 @@ export function AdminPage({ language }: AdminPageProps) {
                 >
                   {roles.map((role) => (
                     <MenuItem key={role} value={role}>
-                      {role}
+                      {formatRole(role, language)}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -503,7 +514,7 @@ export function AdminPage({ language }: AdminPageProps) {
                   color={user.isActive ? "warning" : "success"}
                   onClick={() => void updateUserStatus(user.id, !user.isActive)}
                 >
-                  {user.isActive ? "Block" : "Activate"}
+                  {user.isActive ? t.block : t.activate}
                 </Button>
               </Stack>
             ))}
@@ -514,20 +525,20 @@ export function AdminPage({ language }: AdminPageProps) {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Quality Criteria
+            {t.qualityCriteria}
           </Typography>
           <Stack spacing={1} sx={{ mb: 2 }}>
             {criteria.map((criterion) => (
               <Typography key={criterion.id} variant="body2">
-                {criterion.code} | {criterion.name} | weight={criterion.weight} |{" "}
-                {criterion.isActive ? "active" : "inactive"}
+                {criterion.code} | {criterion.name} | {t.weight.toLowerCase()}={criterion.weight} |{" "}
+                {criterion.isActive ? t.active : t.inactive}
               </Typography>
             ))}
           </Stack>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <TextField
               size="small"
-              label="Code"
+              label={t.code}
               value={newCriterion.code}
               onChange={(event) =>
                 setNewCriterion((prev) => ({ ...prev, code: event.target.value }))
@@ -535,7 +546,7 @@ export function AdminPage({ language }: AdminPageProps) {
             />
             <TextField
               size="small"
-              label="Name"
+              label={t.name}
               value={newCriterion.name}
               onChange={(event) =>
                 setNewCriterion((prev) => ({ ...prev, name: event.target.value }))
@@ -544,14 +555,14 @@ export function AdminPage({ language }: AdminPageProps) {
             <TextField
               size="small"
               type="number"
-              label="Weight"
+              label={t.weight}
               value={newCriterion.weight}
               onChange={(event) =>
                 setNewCriterion((prev) => ({ ...prev, weight: Number(event.target.value || 1) }))
               }
             />
             <Button variant="contained" onClick={() => void createCriterion()}>
-              Upsert
+              {t.upsert}
             </Button>
           </Stack>
         </CardContent>
@@ -560,20 +571,20 @@ export function AdminPage({ language }: AdminPageProps) {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Violation Dictionary
+            {t.violationDictionary}
           </Typography>
           <Stack spacing={1} sx={{ mb: 2 }}>
             {violations.map((violation) => (
               <Typography key={violation.id} variant="body2">
-                {violation.code} | {violation.name} | {violation.defaultSeverity} |{" "}
-                {violation.isActive ? "active" : "inactive"}
+                {formatViolationCode(violation.code, language)} | {formatSeverity(violation.defaultSeverity, language)} |{" "}
+                {violation.isActive ? t.active : t.inactive}
               </Typography>
             ))}
           </Stack>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <TextField
               size="small"
-              label="Code"
+              label={t.code}
               value={newViolation.code}
               onChange={(event) =>
                 setNewViolation((prev) => ({ ...prev, code: event.target.value }))
@@ -581,7 +592,7 @@ export function AdminPage({ language }: AdminPageProps) {
             />
             <TextField
               size="small"
-              label="Name"
+              label={t.name}
               value={newViolation.name}
               onChange={(event) =>
                 setNewViolation((prev) => ({ ...prev, name: event.target.value }))
@@ -590,7 +601,7 @@ export function AdminPage({ language }: AdminPageProps) {
             <TextField
               size="small"
               select
-              label="Severity"
+              label={t.severity}
               value={newViolation.defaultSeverity}
               onChange={(event) =>
                 setNewViolation((prev) => ({
@@ -601,12 +612,12 @@ export function AdminPage({ language }: AdminPageProps) {
             >
               {severities.map((severity) => (
                 <MenuItem key={severity} value={severity}>
-                  {severity}
+                  {formatSeverity(severity, language)}
                 </MenuItem>
               ))}
             </TextField>
             <Button variant="contained" onClick={() => void createViolation()}>
-              Upsert
+              {t.upsert}
             </Button>
           </Stack>
         </CardContent>
@@ -615,7 +626,7 @@ export function AdminPage({ language }: AdminPageProps) {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            System Settings
+            {t.systemSettings}
           </Typography>
           <Stack spacing={1} sx={{ mb: 2 }}>
             {settings.map((setting) => (
@@ -627,20 +638,20 @@ export function AdminPage({ language }: AdminPageProps) {
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <TextField
               size="small"
-              label="Key"
+              label={t.key}
               value={newSetting.key}
               onChange={(event) => setNewSetting((prev) => ({ ...prev, key: event.target.value }))}
             />
             <TextField
               size="small"
-              label="Value"
+              label={t.value}
               value={newSetting.value}
               onChange={(event) =>
                 setNewSetting((prev) => ({ ...prev, value: event.target.value }))
               }
             />
             <Button variant="contained" onClick={() => void createSetting()}>
-              Save
+              {t.save}
             </Button>
           </Stack>
         </CardContent>
@@ -649,12 +660,12 @@ export function AdminPage({ language }: AdminPageProps) {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Moderate Published Content
+            {t.publishMedia}
           </Typography>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <TextField
               size="small"
-              label="Media ID"
+              label={t.mediaId}
               value={mediaStatusForm.mediaId}
               onChange={(event) =>
                 setMediaStatusForm((prev) => ({ ...prev, mediaId: event.target.value }))
@@ -663,7 +674,7 @@ export function AdminPage({ language }: AdminPageProps) {
             <TextField
               size="small"
               select
-              label="Status"
+              label={t.status}
               value={mediaStatusForm.status}
               onChange={(event) =>
                 setMediaStatusForm((prev) => ({
@@ -674,20 +685,20 @@ export function AdminPage({ language }: AdminPageProps) {
             >
               {mediaStatuses.map((status) => (
                 <MenuItem key={status} value={status}>
-                  {status}
+                  {formatMediaStatus(status, language)}
                 </MenuItem>
               ))}
             </TextField>
             <TextField
               size="small"
-              label="Reason"
+              label={t.reason}
               value={mediaStatusForm.reason}
               onChange={(event) =>
                 setMediaStatusForm((prev) => ({ ...prev, reason: event.target.value }))
               }
             />
             <Button variant="contained" onClick={() => void updateMediaStatus()}>
-              Update
+              {t.apply}
             </Button>
           </Stack>
         </CardContent>
@@ -696,7 +707,7 @@ export function AdminPage({ language }: AdminPageProps) {
       <Card>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>
-            Audit Log (latest)
+            {t.auditLog}
           </Typography>
           <Stack spacing={1}>
             {auditLogs.map((entry) => (
@@ -705,7 +716,7 @@ export function AdminPage({ language }: AdminPageProps) {
                 {entry.entityType} ({entry.entityId ?? "n/a"})
               </Typography>
             ))}
-            {!auditLogs.length && <Typography color="text.secondary">No logs yet</Typography>}
+            {!auditLogs.length && <Typography color="text.secondary">{t.noLogs}</Typography>}
           </Stack>
         </CardContent>
       </Card>

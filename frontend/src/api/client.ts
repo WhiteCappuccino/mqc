@@ -98,6 +98,17 @@ export interface UploadMediaVersionPayload {
   fileUrl?: string;
 }
 
+export interface SendForCheckPayload {
+  templateId?: string;
+  criteriaCodes?: string[];
+}
+
+export interface CheckTemplatePayload {
+  id: string;
+  appliesTo: MediaType[];
+  criteriaCodes: string[];
+}
+
 export const api = {
   register(payload: RegisterPayload) {
     return request<AuthResponse>("/auth/register", {
@@ -239,8 +250,16 @@ export const api = {
     return request<MediaItem>(`/media/${mediaId}/version`, { method: "POST", body: formData }, token);
   },
 
-  sendForCheck(id: string, token: string) {
-    return request(`/media/${id}/send-for-check`, { method: "POST" }, token);
+  listCheckTemplates(token: string) {
+    return request<CheckTemplatePayload[]>("/media/check-templates", { method: "GET" }, token);
+  },
+
+  sendForCheck(id: string, token: string, payload?: SendForCheckPayload) {
+    return request(
+      `/media/${id}/send-for-check`,
+      { method: "POST", body: JSON.stringify(payload ?? {}) },
+      token,
+    );
   },
 
   grantMediaAccess(id: string, body: { email: string; level: AccessLevel }, token: string) {

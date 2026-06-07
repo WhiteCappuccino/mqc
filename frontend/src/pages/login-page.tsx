@@ -5,13 +5,12 @@ import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../auth/auth-context";
+import { normalizeAppError } from "../i18n/ui-text";
 
-const schema = z.object({
-  email: z.string().email("Invalid email"),
-  password: z.string().min(8, "Minimum 8 chars"),
-});
-
-type FormValues = z.infer<typeof schema>;
+interface FormValues {
+  email: string;
+  password: string;
+}
 
 interface LoginPageProps {
   language: "en" | "ru";
@@ -29,6 +28,8 @@ const copy = {
     password: "Password",
     login: "Login",
     loginFailed: "Login failed",
+    validationInvalidEmail: "Invalid email",
+    validationMinPassword: "Minimum 8 chars",
   },
   ru: {
     entry: "вход",
@@ -41,6 +42,8 @@ const copy = {
     password: "Пароль",
     login: "Войти",
     loginFailed: "Не удалось войти",
+    validationInvalidEmail: "Неправильный email",
+    validationMinPassword: "Минимум 8 символов",
   },
 } as const;
 
@@ -49,6 +52,10 @@ export function LoginPage({ language }: LoginPageProps) {
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const t = copy[language];
+  const schema = z.object({
+    email: z.string().email(t.validationInvalidEmail),
+    password: z.string().min(8, t.validationMinPassword),
+  });
 
   const {
     register,
@@ -64,7 +71,7 @@ export function LoginPage({ language }: LoginPageProps) {
       await login(values.email, values.password);
       navigate("/dashboard");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : t.loginFailed);
+      setError(normalizeAppError(submitError, language, t.loginFailed));
     }
   }
 

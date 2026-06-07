@@ -11,6 +11,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import { normalizeAppError } from "../i18n/ui-text";
 
 interface ResetPasswordPageProps {
   language: "en" | "ru";
@@ -59,7 +60,7 @@ export function ResetPasswordPage({ language }: ResetPasswordPageProps) {
       await api.resetPassword(token, newPassword);
       setSuccess(t.success);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : t.failed);
+      setError(normalizeAppError(submitError, language, t.failed));
     }
   }
 

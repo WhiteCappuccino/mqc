@@ -5,27 +5,15 @@ import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../auth/auth-context";
+import { normalizeAppError } from "../i18n/ui-text";
 
-const schema = z
-  .object({
-    fullName: z.string().min(2, "Minimum 2 chars"),
-    username: z
-      .string()
-      .min(3, "Minimum 3 chars")
-      .regex(/^[a-zA-Z0-9_.-]+$/, "Only letters, digits and _.-"),
-    email: z.string().email("Invalid email"),
-    password: z
-      .string()
-      .min(8, "Minimum 8 chars")
-      .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, "Use upper/lowercase and digit"),
-    confirmPassword: z.string().min(8, "Minimum 8 chars"),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
-
-type FormValues = z.infer<typeof schema>;
+interface FormValues {
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
 
 interface RegisterPageProps {
   language: "en" | "ru";
@@ -45,6 +33,13 @@ const copy = {
     confirmPassword: "Confirm password",
     submit: "Register",
     failed: "Registration failed",
+    minFullName: "Minimum 2 chars",
+    minUsername: "Minimum 3 chars",
+    usernamePattern: "Only letters, digits and _.-",
+    invalidEmail: "Invalid email",
+    minPassword: "Minimum 8 chars",
+    passwordPattern: "Use upper/lowercase and digit",
+    passwordsMismatch: "Passwords do not match",
   },
   ru: {
     access: "доступ",
@@ -59,6 +54,13 @@ const copy = {
     confirmPassword: "Подтвердите пароль",
     submit: "Зарегистрироваться",
     failed: "Не удалось зарегистрироваться",
+    minFullName: "Минимум 2 символа",
+    minUsername: "Минимум 3 символа",
+    usernamePattern: "Только буквы, цифры и _.-",
+    invalidEmail: "Неправильный email",
+    minPassword: "Минимум 8 символов",
+    passwordPattern: "Используйте строчные, заглавные буквы и цифру",
+    passwordsMismatch: "Пароли не совпадают",
   },
 } as const;
 
@@ -67,6 +69,18 @@ export function RegisterPage({ language }: RegisterPageProps) {
   const { register: registerAccount } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const t = copy[language];
+  const schema = z
+    .object({
+      fullName: z.string().min(2, t.minFullName),
+      username: z.string().min(3, t.minUsername).regex(/^[a-zA-Z0-9_.-]+$/, t.usernamePattern),
+      email: z.string().email(t.invalidEmail),
+      password: z.string().min(8, t.minPassword).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, t.passwordPattern),
+      confirmPassword: z.string().min(8, t.minPassword),
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: t.passwordsMismatch,
+      path: ["confirmPassword"],
+    });
 
   const {
     register,
@@ -87,7 +101,7 @@ export function RegisterPage({ language }: RegisterPageProps) {
       });
       navigate("/dashboard");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : t.failed);
+      setError(normalizeAppError(submitError, language, t.failed));
     }
   }
 

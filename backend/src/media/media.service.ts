@@ -27,8 +27,13 @@ import {
 } from "../analyzer/analyzer-client.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  ANALYZER_VIOLATION_PENALTIES,
+  ANALYZER_VIOLATION_TO_CRITERIA,
+} from "../quality/analyzer-rule-maps";
 import { StorageService } from "../storage/storage.service";
 import { ListMediaQueryDto } from "./dto/list-media-query.dto";
+import { SendForCheckDto } from "./dto/send-for-check.dto";
 import { UpdateMediaVersionDto } from "./dto/update-media-version.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
 
@@ -81,7 +86,7 @@ export class MediaService {
 
     const media = await this.prisma.mediaItem.create({
       data: {
-        title: dto.title,
+        title: dto.title.trim(),
         description: dto.description,
         type: inferredType,
         ownerId: user.sub,
@@ -172,7 +177,7 @@ export class MediaService {
       return transaction.mediaItem.update({
         where: { id: media.id },
         data: {
-          title: dto.title ?? media.title,
+          title: dto.title?.trim() ? dto.title.trim() : media.title,
           description: dto.description ?? media.description,
           type: inferredType,
           fileName: source.fileName,
@@ -289,7 +294,7 @@ export class MediaService {
     };
   }
 
-  async sendToAutomaticCheck(id: string, user: JwtPayload) {
+  async sendToAutomaticCheck(id: string, user: JwtPayload, options?: SendForCheckDto) {
     const media = await this.prisma.mediaItem.findUnique({ where: { id } });
     if (!media) throw new NotFoundException("Media not found");
     await this.assertCanEditMedia(media.id, user);
@@ -298,6 +303,9 @@ export class MediaService {
       where: { kind: QualityRuleKind.CRITERION, isActive: true },
       orderBy: { code: "asc" },
     });
+
+    const selectedCriteria = this.selectCriteria(criteria, options?.criteriaCodes);
+    const templateId = options?.templateId ?? "custom";
 
     await this.prisma.mediaItem.update({
       where: { id },
@@ -313,7 +321,7 @@ export class MediaService {
 
     const result = await this.analyzerClient.analyze({
       mediaType: media.type,
-      title: media.title,
+      title: media.title.trim() || media.fileName,
       description: media.description ?? undefined,
       mimeType: media.mimeType,
       sizeBytes: media.sizeBytes,
@@ -322,26 +330,30 @@ export class MediaService {
       duplicateHint: duplicateCount > 0,
     });
 
-    const finalStatus = this.mapRecommendationToStatus(result);
+    const filteredResult = this.filterAnalyzeResult(result, selectedCriteria);
+    const finalStatus = this.mapRecommendationToStatus(filteredResult);
     const qualityCheck = await this.prisma.qualityCheck.create({
       data: {
         mediaItemId: media.id,
         initiatedById: user.sub,
         status: CheckStatus.COMPLETED,
         mediaVersion: media.version,
-        criteria: criteria.map((criterion) => ({
+        criteria: {
+          templateId,
+          items: selectedCriteria.map((criterion) => ({
           code: criterion.code,
           name: criterion.name,
           weight: criterion.weight,
-        })) as Prisma.InputJsonValue,
-        autoResult: result.details as Prisma.InputJsonValue,
-        autoScore: result.score,
-        finalScore: result.score,
+          })),
+        } as Prisma.InputJsonValue,
+        autoResult: filteredResult.details as Prisma.InputJsonValue,
+        autoScore: filteredResult.score,
+        finalScore: filteredResult.score,
         finishedAt: new Date(),
       },
     });
 
-    await this.persistViolations(media.id, media.version, qualityCheck.id, result.violations);
+    await this.persistViolations(media.id, media.version, qualityCheck.id, filteredResult.violations);
 
     const updatedMedia = await this.prisma.mediaItem.update({
       where: { id: media.id },
@@ -352,7 +364,7 @@ export class MediaService {
       userId: media.ownerId,
       type: "AUTO_CHECK_FINISHED",
       title: "Automatic check finished",
-      message: `Automatic check for "${media.title}" is completed. Score: ${result.score}.`,
+      message: `Automatic check for "${media.title}" is completed. Score: ${filteredResult.score}.`,
       alsoEmail: true,
     });
 
@@ -373,9 +385,10 @@ export class MediaService {
       entityId: media.id,
       metadata: {
         score: result.score,
-        violations: result.violations,
+        violations: filteredResult.violations,
         status: updatedMedia.status,
         duplicateHint: duplicateCount > 0,
+        templateId,
       },
     });
 
@@ -641,6 +654,81 @@ export class MediaService {
     if (result.recommendation === "approved") return MediaStatus.AUTO_CHECKED;
     if (result.recommendation === "manual_review") return MediaStatus.NEEDS_MANUAL_MODERATION;
     return MediaStatus.ON_REVISION;
+  }
+
+  private selectCriteria(
+    allCriteria: Array<{ code: string; name: string; weight: number | null }>,
+    selectedCodes?: string[],
+  ) {
+    if (!selectedCodes?.length) return allCriteria;
+    const codeSet = new Set(selectedCodes.map((code) => code.trim().toUpperCase()).filter(Boolean));
+    const filtered = allCriteria.filter((criterion) => codeSet.has(criterion.code));
+    return filtered.length ? filtered : allCriteria;
+  }
+
+  private filterAnalyzeResult(
+    result: AnalyzeResponse,
+    selectedCriteria: Array<{ code: string; name: string; weight: number | null }>,
+  ): AnalyzeResponse {
+    const selectedAnalyzerCriteria = new Set(
+      selectedCriteria.map((criterion) => criterion.code.toLowerCase()),
+    );
+
+    const filteredViolations = [...new Set(result.violations)].filter((code) => {
+      const normalizedCode = code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+      const mappedCriteria = ANALYZER_VIOLATION_TO_CRITERIA[normalizedCode] ?? [];
+      return mappedCriteria.some((criterion) => selectedAnalyzerCriteria.has(criterion));
+    });
+
+    const score = Math.max(
+      0,
+      Math.min(
+        1,
+        Number(
+          (
+            1 -
+            filteredViolations.reduce((sum, code) => {
+              const normalizedCode = code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+              return sum + (ANALYZER_VIOLATION_PENALTIES[normalizedCode] ?? 0);
+            }, 0)
+          ).toFixed(3),
+        ),
+      ),
+    );
+
+    const violationReasons =
+      typeof result.details?.violationReasons === "object" && result.details?.violationReasons
+        ? Object.fromEntries(
+            Object.entries(result.details.violationReasons as Record<string, unknown>).filter(
+              ([code]) => filteredViolations.includes(code),
+            ),
+          )
+        : {};
+
+    const checkedCriteria = Array.isArray(result.details?.checkedCriteria)
+      ? (result.details.checkedCriteria as string[]).filter((criterion) =>
+          selectedAnalyzerCriteria.has(String(criterion)),
+        )
+      : [];
+
+    const filteredResult: AnalyzeResponse = {
+      ...result,
+      score,
+      violations: filteredViolations,
+      recommendation:
+        score >= 0.85 && filteredViolations.length === 0
+          ? "approved"
+          : score >= 0.6
+            ? "manual_review"
+            : "reject",
+      details: {
+        ...result.details,
+        checkedCriteria,
+        violationReasons,
+      },
+    };
+
+    return filteredResult;
   }
 
   private async persistViolations(
