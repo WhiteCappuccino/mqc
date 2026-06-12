@@ -12,6 +12,14 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import {
+  formatDateTime,
+  formatMediaStatus,
+  formatMediaType,
+  formatSeverity,
+  formatViolationCode,
+  normalizeAppError,
+} from "../i18n/ui-text";
 import type { MediaItem } from "../types/domain";
 
 interface ModerationPageProps {
@@ -101,7 +109,7 @@ export function ModerationPage({ language }: ModerationPageProps) {
         }[],
       );
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t.loadError);
+      setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
       setLoading(false);
     }
@@ -129,7 +137,7 @@ export function ModerationPage({ language }: ModerationPageProps) {
       );
       await load();
     } catch (decisionError) {
-      setError(decisionError instanceof Error ? decisionError.message : t.decisionError);
+      setError(normalizeAppError(decisionError, language, t.decisionError));
     }
   }
 
@@ -140,9 +148,7 @@ export function ModerationPage({ language }: ModerationPageProps) {
       await api.markViolationFalsePositive(violationId, !currentValue, token);
       await load();
     } catch (flagError) {
-      setError(
-        flagError instanceof Error ? flagError.message : t.falsePositiveError,
-      );
+      setError(normalizeAppError(flagError, language, t.falsePositiveError));
     }
   }
 
@@ -165,7 +171,7 @@ export function ModerationPage({ language }: ModerationPageProps) {
           <CardContent>
             <Typography variant="h6">{item.title}</Typography>
             <Typography color="text.secondary">
-              {t.status}={item.status} | {t.type}={item.type}
+              {t.status}={formatMediaStatus(item.status, language)} | {t.type}={formatMediaType(item.type, language)}
             </Typography>
             <TextField
               label={t.comment}
@@ -215,8 +221,9 @@ export function ModerationPage({ language }: ModerationPageProps) {
             {violationHistory.map((entry) => (
               <Stack key={entry.id} direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                  {entry.severity} | {entry.type} | {entry.mediaItem?.title ?? t.unknown} |{" "}
-                  {new Date(entry.createdAt).toLocaleString()}
+                  {formatSeverity(entry.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL", language)} |{" "}
+                  {formatViolationCode(entry.type, language)} | {entry.mediaItem?.title ?? t.unknown} |{" "}
+                  {formatDateTime(entry.createdAt, language)}
                   {entry.isFalsePositive ? ` | ${t.falsePositive}` : ""}
                 </Typography>
                 <Button

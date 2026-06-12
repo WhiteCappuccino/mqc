@@ -22,7 +22,9 @@ import multer from "multer";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import type { JwtPayload } from "../auth/jwt-payload.interface";
+import { CHECK_TEMPLATE_PRESETS } from "../quality/check-template-presets";
 import { ListMediaQueryDto } from "./dto/list-media-query.dto";
+import { SendForCheckDto } from "./dto/send-for-check.dto";
 import { UpdateMediaVersionDto } from "./dto/update-media-version.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
 import { MediaService } from "./media.service";
@@ -37,6 +39,11 @@ export class MediaController {
   @Get()
   list(@CurrentUser() user: JwtPayload, @Query() query: ListMediaQueryDto) {
     return this.mediaService.list(user, query);
+  }
+
+  @Get("check-templates")
+  checkTemplates() {
+    return CHECK_TEMPLATE_PRESETS;
   }
 
   @Get(":id")
@@ -118,8 +125,12 @@ export class MediaController {
   }
 
   @Post(":id/send-for-check")
-  sendForCheck(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
-    return this.mediaService.sendToAutomaticCheck(id, user);
+  sendForCheck(
+    @Param("id") id: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: SendForCheckDto,
+  ) {
+    return this.mediaService.sendToAutomaticCheck(id, user, body);
   }
 
   @Post(":id/analyze")

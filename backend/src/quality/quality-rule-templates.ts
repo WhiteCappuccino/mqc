@@ -28,12 +28,6 @@ export const QUALITY_CRITERION_TEMPLATES: QualityCriterionTemplate[] = [
     weight: 1,
   },
   {
-    code: "PUBLICATION_RULES",
-    name: "Publication rules",
-    description: "Checks title, description and file name for forbidden terms and policy markers.",
-    weight: 1.8,
-  },
-  {
     code: "DUPLICATION",
     name: "Duplicate material",
     description: "Checks whether the uploaded file duplicates an existing material checksum.",
@@ -94,12 +88,6 @@ export const QUALITY_CRITERION_TEMPLATES: QualityCriterionTemplate[] = [
     weight: 1.4,
   },
   {
-    code: "VIDEO_SHARPNESS",
-    name: "Video frame sharpness",
-    description: "Checks the ratio of blurry sampled video frames.",
-    weight: 1,
-  },
-  {
     code: "VIDEO_BLACK_SCREEN",
     name: "Video black frames",
     description: "Checks whether sampled video frames contain excessive black screen segments.",
@@ -134,36 +122,6 @@ export const QUALITY_CRITERION_TEMPLATES: QualityCriterionTemplate[] = [
     name: "Audio intelligibility proxy",
     description: "Checks speech intelligibility risk from loudness and silence metrics.",
     weight: 0.8,
-  },
-  {
-    code: "TEXT_SPELLING_PROXY",
-    name: "Text spelling proxy",
-    description: "Checks text quality through extractability and basic structure metrics.",
-    weight: 0.7,
-  },
-  {
-    code: "TEXT_FORBIDDEN_LEXICON",
-    name: "Text forbidden lexicon",
-    description: "Checks extracted text for forbidden vocabulary.",
-    weight: 1.8,
-  },
-  {
-    code: "TEXT_LENGTH",
-    name: "Text length",
-    description: "Requires text length from 20 to 10000 words.",
-    weight: 0.9,
-  },
-  {
-    code: "TEXT_TEMPLATE",
-    name: "Text template",
-    description: "Checks whether long text has expected paragraph structure.",
-    weight: 0.6,
-  },
-  {
-    code: "TEXT_READABILITY",
-    name: "Text readability",
-    description: "Checks sentence length and vocabulary diversity.",
-    weight: 0.9,
   },
 ];
 

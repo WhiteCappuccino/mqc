@@ -98,6 +98,42 @@ export interface UploadMediaVersionPayload {
   fileUrl?: string;
 }
 
+export interface SendForCheckPayload {
+  templateId?: string;
+  criteriaCodes?: string[];
+  profileRequirements?: {
+    maxFileSizeMb?: string;
+    allowedContainers?: string[];
+    allowedVideoCodecs?: string[];
+    allowedAudioCodecs?: string[];
+    expectedFps?: string;
+    expectedMinBitrateKbps?: string;
+    expectedMaxBitrateKbps?: string;
+    requireAudio?: boolean;
+  };
+  renderRules?: Array<{
+    id: string;
+    name: string;
+    fileNamePattern: string;
+    mediaType: MediaType;
+    expectedContainer?: string;
+    expectedVideoCodec?: string;
+    expectedAudioCodec?: string;
+    expectedWidth?: string;
+    expectedHeight?: string;
+    expectedFps?: string;
+    expectedBitrateKbps?: string;
+    expectedMinDurationSec?: string;
+    expectedMaxDurationSec?: string;
+  }>;
+}
+
+export interface CheckTemplatePayload {
+  id: string;
+  appliesTo: MediaType[];
+  criteriaCodes: string[];
+}
+
 export const api = {
   register(payload: RegisterPayload) {
     return request<AuthResponse>("/auth/register", {
@@ -239,8 +275,16 @@ export const api = {
     return request<MediaItem>(`/media/${mediaId}/version`, { method: "POST", body: formData }, token);
   },
 
-  sendForCheck(id: string, token: string) {
-    return request(`/media/${id}/send-for-check`, { method: "POST" }, token);
+  listCheckTemplates(token: string) {
+    return request<CheckTemplatePayload[]>("/media/check-templates", { method: "GET" }, token);
+  },
+
+  sendForCheck(id: string, token: string, payload?: SendForCheckPayload) {
+    return request(
+      `/media/${id}/send-for-check`,
+      { method: "POST", body: JSON.stringify(payload ?? {}) },
+      token,
+    );
   },
 
   grantMediaAccess(id: string, body: { email: string; level: AccessLevel }, token: string) {
@@ -440,7 +484,6 @@ export const api = {
       code: string;
       name: string;
       description?: string;
-      weight?: number;
       isActive?: boolean;
     },
     token: string,
@@ -492,6 +535,8 @@ export const api = {
       actorId?: string;
       action?: string;
       entityType?: string;
+      dateFrom?: string;
+      dateTo?: string;
     },
   ) {
     return request(`/admin/audit-logs${toQueryString(query)}`, { method: "GET" }, token);

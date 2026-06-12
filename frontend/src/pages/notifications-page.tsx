@@ -12,6 +12,13 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import {
+  formatDateTime,
+  formatNotificationChannel,
+  formatNotificationMessage,
+  formatNotificationTitle,
+  normalizeAppError,
+} from "../i18n/ui-text";
 import type { NotificationItem } from "../types/domain";
 
 interface NotificationsPageProps {
@@ -53,7 +60,7 @@ export function NotificationsPage({ language }: NotificationsPageProps) {
     try {
       setItems(await api.listNotifications(token));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t.loadError);
+      setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
       setLoading(false);
     }
@@ -69,7 +76,7 @@ export function NotificationsPage({ language }: NotificationsPageProps) {
       await api.markNotificationRead(id, token);
       setItems((prev) => prev.map((item) => (item.id === id ? { ...item, isRead: true } : item)));
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.updateError);
+      setError(normalizeAppError(actionError, language, t.updateError));
     }
   }
 
@@ -89,7 +96,7 @@ export function NotificationsPage({ language }: NotificationsPageProps) {
         <Card key={item.id}>
           <CardContent>
             <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-              <Chip size="small" label={item.channel} />
+              <Chip size="small" label={formatNotificationChannel(item.channel, language)} />
               <Chip
                 size="small"
                 label={item.isRead ? t.read : t.new}
@@ -104,10 +111,14 @@ export function NotificationsPage({ language }: NotificationsPageProps) {
                 }
               />
             </Stack>
-            <Typography variant="h6">{item.title}</Typography>
-            <Typography color="text.secondary">{item.message}</Typography>
+            <Typography variant="h6">
+              {formatNotificationTitle(item.type, item.title, language)}
+            </Typography>
+            <Typography color="text.secondary">
+              {formatNotificationMessage(item.message, language)}
+            </Typography>
             <Typography variant="caption" color="text.secondary">
-              {new Date(item.createdAt).toLocaleString()}
+              {formatDateTime(item.createdAt, language)}
             </Typography>
           </CardContent>
           {!item.isRead && (

@@ -8,6 +8,10 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   InputLabel,
   MenuItem,
@@ -22,9 +26,26 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import {
+  formatDate,
+  formatMediaStatus,
+  formatMediaType,
+  formatSeverity,
+  normalizeAppError,
+} from "../i18n/ui-text";
+import {
+  getCustomCheckTemplates,
+  getCheckTemplateMeta,
+  getCheckTemplateUiCopy,
+  getDefaultTemplateId,
+  getFavoriteTemplateIds,
+  setDefaultTemplateId,
+  setFavoriteTemplateIds,
+  type CheckTemplate,
+} from "../check/check-templates";
 import type { MediaItem, MediaStatus, MediaType, ViolationSeverity } from "../types/domain";
 
-const mediaTypes: Array<MediaType | ""> = ["", "IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"];
+const mediaTypes: Array<MediaType | ""> = ["", "IMAGE", "VIDEO", "AUDIO"];
 const mediaStatuses: Array<MediaStatus | ""> = [
   "",
   "UPLOADED",
@@ -66,8 +87,19 @@ const copy = {
     apply: "Apply",
     open: "Open",
     runCheck: "Run check",
+    runBaseCheck: "Run base template",
+    chooseTemplate: "Choose template",
     saved: "Saved",
     favorite: "Favorite",
+    templatesTitle: "Check templates",
+    templateSearch: "Search template",
+    favoriteTemplates: "Favorites only",
+    applicableTemplates: "Suitable for this media",
+    makeDefault: "Set default",
+    defaultTemplate: "Default",
+    startSelectedCheck: "Run selected template",
+    noTemplates: "No templates found",
+    previewUnavailable: "Preview unavailable",
     owner: "owner",
     created: "created",
     score: "score",
@@ -78,6 +110,7 @@ const copy = {
     analyzeError: "Analyze failed",
     favoriteError: "Failed to update favorite",
     all: "ALL",
+    untitled: "Untitled file",
   },
   ru: {
     title: "Дашборд",
@@ -101,8 +134,19 @@ const copy = {
     apply: "Применить",
     open: "Открыть",
     runCheck: "Запустить",
+    runBaseCheck: "Базовая проверка",
+    chooseTemplate: "Выбрать шаблон",
     saved: "Сохранено",
     favorite: "В избранное",
+    templatesTitle: "Шаблоны проверки",
+    templateSearch: "Поиск шаблона",
+    favoriteTemplates: "Только избранные",
+    applicableTemplates: "Подходящие для этого медиа",
+    makeDefault: "Сделать по умолчанию",
+    defaultTemplate: "По умолчанию",
+    startSelectedCheck: "Запустить выбранный шаблон",
+    noTemplates: "Подходящих шаблонов нет",
+    previewUnavailable: "Превью недоступно",
     owner: "автор",
     created: "создано",
     score: "оценка",
@@ -113,12 +157,14 @@ const copy = {
     analyzeError: "Не удалось запустить проверку",
     favoriteError: "Не удалось обновить избранное",
     all: "ВСЕ",
+    untitled: "Файл без названия",
   },
 } as const;
 
 export function DashboardPage({ language, hideHero }: DashboardPageProps) {
   const { token } = useAuth();
   const t = copy[language];
+  const templateUi = getCheckTemplateUiCopy(language);
   const [items, setItems] = useState<MediaItem[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +181,18 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
     "createdAt",
   );
   const [showNoMediaMessage, setShowNoMediaMessage] = useState(false);
+  const [templates, setTemplates] = useState<CheckTemplate[]>([]);
+  const [templateDialogMedia, setTemplateDialogMedia] = useState<MediaItem | null>(null);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [favoriteTemplateIds, setFavoriteTemplateIdsState] = useState<string[]>(() =>
+    typeof window === "undefined" ? [] : getFavoriteTemplateIds(),
+  );
+  const [defaultTemplateId, setDefaultTemplateIdState] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : getDefaultTemplateId(),
+  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [applicableOnly, setApplicableOnly] = useState(true);
 
   async function load() {
     if (!token) return;
@@ -157,7 +215,7 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
       setItems(media);
       setFavoriteIds(favorites.map((entry) => entry.mediaItem.id));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t.loadError);
+      setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
       setLoading(false);
     }
@@ -167,15 +225,40 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
     void load();
   }, [token]);
 
-  async function runAnalysis(id: string) {
+  useEffect(() => {
+    async function loadTemplates() {
+      if (!token) return;
+      try {
+        const response = await api.listCheckTemplates(token);
+        setTemplates([
+          ...(response as CheckTemplate[]).map((template) => ({ ...template, source: "system" as const })),
+          ...getCustomCheckTemplates(),
+        ]);
+      } catch {
+        setTemplates(getCustomCheckTemplates());
+      }
+    }
+
+    void loadTemplates();
+  }, [token]);
+
+  async function runAnalysis(
+    id: string,
+    options?: {
+      templateId?: string;
+      criteriaCodes?: string[];
+      profileRequirements?: CheckTemplate["profileRequirements"];
+      renderRules?: CheckTemplate["renderRules"];
+    },
+  ) {
     if (!token) return;
     setBusyId(id);
     setError(null);
     try {
-      await api.sendForCheck(id, token);
+      await api.sendForCheck(id, token, options);
       await load();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t.analyzeError);
+      setError(normalizeAppError(actionError, language, t.analyzeError));
     } finally {
       setBusyId(null);
     }
@@ -192,13 +275,193 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
       }
       await load();
     } catch (favoriteError) {
-      setError(favoriteError instanceof Error ? favoriteError.message : t.favoriteError);
+      setError(normalizeAppError(favoriteError, language, t.favoriteError));
     }
   }
 
   async function applyFilters() {
     setShowNoMediaMessage(true);
     await load();
+  }
+
+  function openTemplateDialog(item: MediaItem) {
+    setTemplateDialogMedia(item);
+    const preferredTemplateId =
+      defaultTemplateId &&
+      templates.some(
+        (template) => template.id === defaultTemplateId && template.appliesTo.includes(item.type),
+      )
+        ? defaultTemplateId
+        : templates.find((template) => template.appliesTo.includes(item.type))?.id ?? null;
+    setSelectedTemplateId(preferredTemplateId);
+    setFavoriteOnly(false);
+    setApplicableOnly(true);
+    setTemplateSearch("");
+  }
+
+  function closeTemplateDialog() {
+    setTemplateDialogMedia(null);
+  }
+
+  function toggleFavoriteTemplate(templateId: string) {
+    const next = favoriteTemplateIds.includes(templateId)
+      ? favoriteTemplateIds.filter((id) => id !== templateId)
+      : [...favoriteTemplateIds, templateId];
+    setFavoriteTemplateIdsState(next);
+    setFavoriteTemplateIds(next);
+  }
+
+  function saveDefaultTemplate(templateId: string) {
+    setDefaultTemplateIdState(templateId);
+    setDefaultTemplateId(templateId);
+  }
+
+  async function runSelectedTemplate() {
+    if (!templateDialogMedia || !selectedTemplateId) return;
+    const template = templates.find((entry) => entry.id === selectedTemplateId);
+    if (!template) return;
+    closeTemplateDialog();
+    await runAnalysis(templateDialogMedia.id, {
+      templateId: template.id,
+      criteriaCodes: template.criteriaCodes,
+      profileRequirements: template.profileRequirements,
+      renderRules: template.renderRules,
+    });
+  }
+
+  const visibleTemplates = templates.filter((template) => {
+    const matchesSearch = (() => {
+      const meta = getCheckTemplateMeta(template, language);
+      const haystack = `${meta.name} ${meta.description}`.toLowerCase();
+      return haystack.includes(templateSearch.trim().toLowerCase());
+    })();
+    const matchesFavorite = !favoriteOnly || favoriteTemplateIds.includes(template.id);
+    const matchesMedia =
+      !applicableOnly ||
+      !templateDialogMedia ||
+      template.appliesTo.includes(templateDialogMedia.type);
+    return matchesSearch && matchesFavorite && matchesMedia;
+  });
+
+  function getDisplayTitle(item: MediaItem) {
+    return item.title?.trim() || item.fileName?.trim() || t.untitled;
+  }
+
+  function renderMediaPreview(item: MediaItem) {
+    if (item.type === "IMAGE" && item.previewUrl) {
+      return (
+        <Box
+          sx={{
+            minHeight: 320,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            border: "1px solid",
+            borderColor: "divider",
+            backgroundColor: "background.default",
+            p: 0,
+          }}
+        >
+          <Box
+            component="img"
+            src={item.previewUrl}
+            alt={getDisplayTitle(item)}
+            sx={{
+              width: "100%",
+              height: "auto",
+              maxHeight: 320,
+              objectFit: "contain",
+              display: "block",
+            }}
+          />
+        </Box>
+      );
+    }
+
+    if (item.type === "VIDEO" && item.previewUrl) {
+      return (
+        <Box
+          sx={{
+            minHeight: 320,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            border: "1px solid",
+            borderColor: "divider",
+            backgroundColor: "background.default",
+          }}
+        >
+          <Box
+            component="video"
+            src={item.previewUrl}
+            controls
+            muted
+            sx={{
+              width: "100%",
+              height: "auto",
+              maxHeight: 320,
+              display: "block",
+              backgroundColor: "background.default",
+            }}
+          />
+        </Box>
+      );
+    }
+
+    if (item.type === "AUDIO" && item.previewUrl) {
+      return (
+        <Stack
+          sx={{
+            minHeight: 140,
+            justifyContent: "center",
+            p: 2,
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            backgroundColor: "background.default",
+          }}
+        >
+          <audio controls src={item.previewUrl} style={{ width: "100%" }} />
+        </Stack>
+      );
+    }
+
+    if (item.type === "TEXT") {
+      return (
+        <Stack
+          spacing={1}
+          sx={{
+            minHeight: 160,
+            p: 2,
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            backgroundColor: "background.default",
+            justifyContent: "space-between",
+          }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {item.description || item.fileName || t.previewUnavailable}
+          </Typography>
+        </Stack>
+      );
+    }
+
+    return (
+      <Stack
+        sx={{
+          minHeight: 160,
+          p: 2,
+          borderRadius: 3,
+          border: "1px solid",
+          borderColor: "divider",
+          backgroundColor: "background.default",
+          justifyContent: "center",
+        }}
+      >
+        <Typography color="text.secondary">{t.previewUnavailable}</Typography>
+      </Stack>
+    );
   }
 
   if (loading) {
@@ -285,7 +548,7 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
             >
               {mediaTypes.map((option) => (
                 <MenuItem key={option || "all"} value={option}>
-                  {option || t.all}
+                  {option ? formatMediaType(option, language) : t.all}
                 </MenuItem>
               ))}
             </Select>
@@ -302,7 +565,7 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
             >
               {mediaStatuses.map((option) => (
                 <MenuItem key={option || "all"} value={option}>
-                  {option || t.all}
+                  {option ? formatMediaStatus(option, language) : t.all}
                 </MenuItem>
               ))}
             </Select>
@@ -317,9 +580,9 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
                 setSeverity(event.target.value as ViolationSeverity | "")
               }
             >
-              {severities.map((option) => (
+                  {severities.map((option) => (
                 <MenuItem key={option || "all"} value={option}>
-                  {option || t.all}
+                  {option ? formatSeverity(option, language) : t.all}
                 </MenuItem>
               ))}
             </Select>
@@ -384,22 +647,41 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
           const latestCheck = item.qualityChecks?.[0];
 
           return (
-            <Card key={item.id} sx={{ backgroundColor: "background.paper" }}>
-              <CardContent sx={{ p: 2.5 }}>
-                <Stack spacing={2}>
+            <Card
+              key={item.id}
+              sx={{
+                backgroundColor: "background.paper",
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <CardContent
+                sx={{
+                  p: 2.5,
+                  display: "flex",
+                  flexDirection: "column",
+                  flexGrow: 1,
+                }}
+              >
+                <Stack spacing={2} sx={{ flexGrow: 1 }}>
                   <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
-                    <Chip label={item.status} size="small" />
+                    <Chip label={formatMediaStatus(item.status, language)} size="small" />
                     <Chip
-                      label={item.type}
+                      label={formatMediaType(item.type, language)}
                       size="small"
                       sx={{ backgroundColor: (theme) => theme.palette.secondary.main }}
                     />
                   </Stack>
 
                   <Stack spacing={0.75}>
-                    <Typography variant="h4">{item.title}</Typography>
+                    <Typography variant="h4">{getDisplayTitle(item)}</Typography>
                     <Typography color="text.secondary">{item.fileName}</Typography>
                   </Stack>
+
+                  <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                    {renderMediaPreview(item)}
+                  </Box>
 
                   <Divider sx={{ borderColor: "#111111", borderBottomWidth: 2 }} />
 
@@ -423,7 +705,7 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
                         {t.created}
                       </Typography>
                       <Typography color="text.secondary">
-                        {new Date(item.createdAt).toLocaleDateString()}
+                        {formatDate(item.createdAt, language)}
                       </Typography>
                     </Box>
                     <Box>
@@ -441,8 +723,20 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
                 <Button component={RouterLink} to={`/media/${item.id}`} variant="outlined">
                   {t.open}
                 </Button>
-                <Button onClick={() => runAnalysis(item.id)} disabled={busyId === item.id}>
-                  {t.runCheck}
+                <Button
+                  onClick={() => {
+                    const basicTemplate = templates.find((template) => template.id === "basic");
+                    void runAnalysis(item.id, {
+                      templateId: basicTemplate?.id ?? "basic",
+                      criteriaCodes: basicTemplate?.criteriaCodes,
+                    });
+                  }}
+                  disabled={busyId === item.id}
+                >
+                  {t.runBaseCheck}
+                </Button>
+                <Button onClick={() => openTemplateDialog(item)} disabled={busyId === item.id}>
+                  {t.chooseTemplate}
                 </Button>
                 <Button
                   onClick={() => toggleFavorite(item.id)}
@@ -456,6 +750,108 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
         })}
       </Box>
 
+      <Dialog
+        open={Boolean(templateDialogMedia)}
+        onClose={closeTemplateDialog}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>{t.templatesTitle}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField
+              label={t.templateSearch}
+              value={templateSearch}
+              onChange={(event) => setTemplateSearch(event.target.value)}
+            />
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+              <Chip
+                label={t.favoriteTemplates}
+                color={favoriteOnly ? "primary" : "default"}
+                onClick={() => setFavoriteOnly((current) => !current)}
+              />
+              <Chip
+                label={t.applicableTemplates}
+                color={applicableOnly ? "primary" : "default"}
+                onClick={() => setApplicableOnly((current) => !current)}
+              />
+            </Stack>
+            <Stack spacing={1.5}>
+              {visibleTemplates.map((template) => {
+                const meta = getCheckTemplateMeta(template, language);
+                const isFavorite = favoriteTemplateIds.includes(template.id);
+                const isDefault = defaultTemplateId === template.id;
+                const isSelected = selectedTemplateId === template.id;
+
+                return (
+                  <Paper
+                    key={template.id}
+                    sx={{
+                      p: 2,
+                      borderColor: isSelected ? "primary.main" : "divider",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setSelectedTemplateId(template.id)}
+                  >
+                    <Stack spacing={1.25}>
+                      <Stack
+                        direction={{ xs: "column", md: "row" }}
+                        spacing={1}
+                        sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}
+                      >
+                        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                          <Typography variant="h6">{meta.name}</Typography>
+                          {isDefault && <Chip label={t.defaultTemplate} size="small" />}
+                          {isFavorite && <Chip label={t.favorite} size="small" color="success" />}
+                        </Stack>
+                        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleFavoriteTemplate(template.id);
+                            }}
+                          >
+                            {isFavorite ? t.saved : t.favorite}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              saveDefaultTemplate(template.id);
+                            }}
+                          >
+                            {t.makeDefault}
+                          </Button>
+                        </Stack>
+                      </Stack>
+                      <Typography color="text.secondary">{meta.description}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {templateUi.criteriaCount(template.criteriaCodes.length)}
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                );
+              })}
+              {!visibleTemplates.length && (
+                <Typography color="text.secondary">{t.noTemplates}</Typography>
+              )}
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeTemplateDialog}>{templateUi.close}</Button>
+          <Button
+            variant="contained"
+            onClick={() => void runSelectedTemplate()}
+            disabled={!selectedTemplateId || !templateDialogMedia}
+          >
+            {t.startSelectedCheck}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

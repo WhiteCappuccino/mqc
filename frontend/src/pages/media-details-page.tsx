@@ -12,9 +12,20 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import {
+  formatAccessLevel,
+  formatCheckStatus,
+  formatDateTime,
+  formatMediaStatus,
+  formatMediaType,
+  formatSeverity,
+  formatViolationCode,
+  formatViolationDescription,
+  normalizeAppError,
+} from "../i18n/ui-text";
 import type { AccessLevel, CommentItem, MediaItem, ViolationSeverity } from "../types/domain";
 
 const accessLevels: AccessLevel[] = ["VIEW", "COMMENT", "EDIT", "MODERATE", "MANAGE"];
@@ -37,6 +48,9 @@ const copy = {
     violationCommentError: "Failed to add violation comment",
     versionPrompt: "Choose new file or provide URL for new version",
     versionError: "Failed to upload new version",
+    deleteConfirm: "Delete this media item permanently?",
+    deleteError: "Failed to delete media",
+    delete: "Delete",
     notFound: "Item not found",
     author: "Author",
     version: "Version",
@@ -51,6 +65,8 @@ const copy = {
     violationHistory: "Violation history",
     commentForViolation: "Comment for violation",
     comment: "Comment",
+    status: "Status",
+    score: "Score",
     noViolations: "No violations",
     addManualViolation: "Add manual violation",
     type: "Type",
@@ -89,6 +105,9 @@ const copy = {
     violationCommentError: "Не удалось добавить комментарий к нарушению",
     versionPrompt: "Выберите новый файл или укажите URL для новой версии",
     versionError: "Не удалось загрузить новую версию",
+    deleteConfirm: "Удалить этот медиафайл без возможности восстановления?",
+    deleteError: "Не удалось удалить медиафайл",
+    delete: "Удалить",
     notFound: "Материал не найден",
     author: "Автор",
     version: "Версия",
@@ -103,6 +122,8 @@ const copy = {
     violationHistory: "История нарушений",
     commentForViolation: "Комментарий к нарушению",
     comment: "Комментарий",
+    status: "Статус",
+    score: "Оценка",
     noViolations: "Нарушений пока нет",
     addManualViolation: "Добавить ручное нарушение",
     type: "Тип",
@@ -132,9 +153,11 @@ const copy = {
 } as const;
 
 export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
+  const navigate = useNavigate();
   const { id } = useParams();
-  const { token } = useAuth();
+  const { token, viewer } = useAuth();
   const t = copy[language];
+  const isAdmin = viewer?.role === "ADMIN";
   const [item, setItem] = useState<MediaItem | null>(null);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<
@@ -168,7 +191,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       setComments(mediaComments);
       setAuditLogs(logs as typeof auditLogs);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t.loadError);
+      setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
       setLoading(false);
     }
@@ -186,7 +209,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       await api.sendForCheck(id, token);
       await reload();
     } catch (analysisError) {
-      setError(analysisError instanceof Error ? analysisError.message : t.analyzeError);
+      setError(normalizeAppError(analysisError, language, t.analyzeError));
     } finally {
       setBusy(false);
     }
@@ -200,7 +223,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       setNewComment("");
       await reload();
     } catch (commentError) {
-      setError(commentError instanceof Error ? commentError.message : t.addCommentError);
+      setError(normalizeAppError(commentError, language, t.addCommentError));
     }
   }
 
@@ -213,7 +236,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
         prev.map((comment) => (comment.id === commentId ? { ...comment, isResolved } : comment)),
       );
     } catch (resolveError) {
-      setError(resolveError instanceof Error ? resolveError.message : t.updateCommentError);
+      setError(normalizeAppError(resolveError, language, t.updateCommentError));
     }
   }
 
@@ -225,7 +248,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       setShareEmail("");
       await reload();
     } catch (shareError) {
-      setError(shareError instanceof Error ? shareError.message : t.shareError);
+      setError(normalizeAppError(shareError, language, t.shareError));
     }
   }
 
@@ -236,7 +259,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       await api.revokeMediaAccess(id, userId, token);
       await reload();
     } catch (shareError) {
-      setError(shareError instanceof Error ? shareError.message : t.revokeError);
+      setError(normalizeAppError(shareError, language, t.revokeError));
     }
   }
 
@@ -251,7 +274,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       setReplyText((prev) => ({ ...prev, [parentId]: "" }));
       await reload();
     } catch (commentError) {
-      setError(commentError instanceof Error ? commentError.message : t.replyError);
+      setError(normalizeAppError(commentError, language, t.replyError));
     }
   }
 
@@ -272,7 +295,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       setManualViolationDescription("");
       await reload();
     } catch (violationError) {
-      setError(violationError instanceof Error ? violationError.message : t.violationError);
+      setError(normalizeAppError(violationError, language, t.violationError));
     }
   }
 
@@ -290,7 +313,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       setViolationCommentText((prev) => ({ ...prev, [violationId]: "" }));
       await reload();
     } catch (commentError) {
-      setError(commentError instanceof Error ? commentError.message : t.violationCommentError);
+      setError(normalizeAppError(commentError, language, t.violationCommentError));
     }
   }
 
@@ -314,7 +337,22 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
       setVersionFileUrl("");
       await reload();
     } catch (versionError) {
-      setError(versionError instanceof Error ? versionError.message : t.versionError);
+      setError(normalizeAppError(versionError, language, t.versionError));
+    }
+  }
+
+  async function deleteMedia() {
+    if (!token || !id) return;
+    if (!window.confirm(t.deleteConfirm)) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await api.adminDeleteMedia(id, token);
+      navigate("/dashboard");
+    } catch (deleteError) {
+      setError(normalizeAppError(deleteError, language, t.deleteError));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -342,8 +380,8 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
           </Typography>
           <Typography color="text.secondary">{t.version}: {item.version ?? 1}</Typography>
           <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-            <Chip label={item.type} />
-            <Chip label={item.status} color="primary" />
+            <Chip label={formatMediaType(item.type, language)} />
+            <Chip label={formatMediaStatus(item.status, language)} color="primary" />
             <Chip label={`${(item.sizeBytes / 1024 / 1024).toFixed(2)} MB`} />
           </Stack>
           <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
@@ -353,6 +391,11 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
             {item.publicUrl && (
               <Button href={item.publicUrl} target="_blank">
                 {t.openObject}
+              </Button>
+            )}
+            {isAdmin && (
+              <Button color="error" variant="outlined" onClick={deleteMedia} disabled={busy}>
+                {t.delete}
               </Button>
             )}
           </Stack>
@@ -388,8 +431,9 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
             {item.qualityChecks?.length ? (
               item.qualityChecks.map((analysis) => (
                 <Typography key={analysis.id} variant="body2">
-                  v{analysis.mediaVersion ?? item.version ?? 1} | {new Date(analysis.createdAt).toLocaleString()} |
-                  status={analysis.status} | finalScore={analysis.finalScore}
+                  v{analysis.mediaVersion ?? item.version ?? 1} | {formatDateTime(analysis.createdAt, language)} |{" "}
+                  {t.status ?? "status"}={formatCheckStatus(analysis.status, language)} |{" "}
+                  {t.score ?? "score"}={analysis.finalScore}
                 </Typography>
               ))
             ) : (
@@ -413,8 +457,9 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
                   sx={{ border: "1px solid #e5e7eb", p: 1, borderRadius: 1 }}
                 >
                   <Typography variant="body2">
-                    v{violation.mediaVersion ?? item.version ?? 1} | {violation.severity} |{" "}
-                    {violation.type} | {violation.description}
+                    v{violation.mediaVersion ?? item.version ?? 1} | {formatSeverity(violation.severity, language)} |{" "}
+                    {formatViolationCode(violation.type, language)} |{" "}
+                    {formatViolationDescription(violation.type, violation.description, language)}
                     {violation.isFalsePositive ? ` | ${t.falsePositive}` : ""}
                   </Typography>
                   <Stack direction="row" spacing={1}>
@@ -461,7 +506,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
             >
               {severityLevels.map((level) => (
                 <MenuItem key={level} value={level}>
-                  {level}
+                  {formatSeverity(level, language)}
                 </MenuItem>
               ))}
             </TextField>
@@ -505,7 +550,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
             {(item.access ?? []).map((entry) => (
               <Stack key={entry.id} direction="row" spacing={1} sx={{ alignItems: "center" }}>
                 <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                  {entry.user?.email ?? entry.userId} | {entry.level}
+                  {entry.user?.email ?? entry.userId} | {formatAccessLevel(entry.level, language)}
                 </Typography>
                 <Button size="small" color="error" onClick={() => revokeAccess(entry.userId)}>
                   {t.revoke}
@@ -524,8 +569,8 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
           <Stack spacing={1}>
             {(item.revisions ?? []).map((revision) => (
               <Typography key={revision.id} variant="body2">
-                {t.version} {revision.version} | {revision.fileName} | {revision.status} |{" "}
-                {new Date(revision.createdAt).toLocaleString()}
+                {t.version} {revision.version} | {revision.fileName} | {formatMediaStatus(revision.status, language)} |{" "}
+                {formatDateTime(revision.createdAt, language)}
               </Typography>
             ))}
             {!(item.revisions ?? []).length && (
@@ -543,7 +588,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
           <Stack spacing={1}>
             {auditLogs.map((log) => (
               <Typography key={log.id} variant="body2">
-                {new Date(log.createdAt).toLocaleString()} | {log.action} |{" "}
+                {formatDateTime(log.createdAt, language)} | {log.action} |{" "}
                 {log.actor?.fullName ?? log.actor?.username ?? t.system}
               </Typography>
             ))}
@@ -564,7 +609,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
                   <Typography variant="body2">{comment.text}</Typography>
                   <Typography variant="caption" color="text.secondary">
                     {comment.author?.fullName ?? comment.author?.username ?? comment.authorId} |{" "}
-                    {new Date(comment.createdAt).toLocaleString()}
+                    {formatDateTime(comment.createdAt, language)}
                   </Typography>
                 </CardContent>
                 <CardActions>

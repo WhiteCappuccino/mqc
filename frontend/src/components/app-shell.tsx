@@ -18,8 +18,10 @@ const labels = {
     alerts: "Alerts",
     profile: "Profile",
     moderation: "Moderation",
-    admin: "Admin",
+    admin: "Админ-панель",
     home: "Home",
+    dark: "Dark",
+    light: "Light",
   },
   ru: {
     dashboard: "Дашборд",
@@ -29,8 +31,10 @@ const labels = {
     alerts: "Уведомления",
     profile: "Профиль",
     moderation: "Модерация",
-    admin: "Админ",
+    admin: "Админ-панель",
     home: "Главная",
+    dark: "Темная",
+    light: "Светлая",
   },
 } as const;
 
@@ -78,7 +82,7 @@ export function AppShell({
               <Typography variant="h3">MQC</Typography>
               <Stack direction="row" spacing={1} sx={{ ml: { xs: 2.5, md: 4 } }}>
                 <Button variant="outlined" onClick={onToggleColorMode}>
-                  {colorMode === "light" ? "Dark" : "Light"}
+                  {colorMode === "light" ? t.dark : t.light}
                 </Button>
                 <Button variant="outlined" onClick={onToggleLanguage}>
                   {language === "en" ? "RU" : "EN"}

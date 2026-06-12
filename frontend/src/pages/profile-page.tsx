@@ -14,6 +14,7 @@ import {
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import { formatDateTime, formatMediaStatus, normalizeAppError } from "../i18n/ui-text";
 import type { MediaItem, Viewer } from "../types/domain";
 import type { UiPreferences } from "../ui/ui-preferences";
 
@@ -118,7 +119,7 @@ export function ProfilePage({ language, preferences, onPreferencesChange }: Prof
       setProfile(profileData);
       setHistory(historyData);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t.loadError);
+      setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
       setLoading(false);
     }
@@ -145,7 +146,7 @@ export function ProfilePage({ language, preferences, onPreferencesChange }: Prof
       setProfile(updated);
       setSuccess(t.profileUpdated);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : t.saveError);
+      setError(normalizeAppError(saveError, language, t.saveError));
     }
   }
 
@@ -159,7 +160,7 @@ export function ProfilePage({ language, preferences, onPreferencesChange }: Prof
       setNewPassword("");
       setSuccess(t.passwordChanged);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : t.passwordError);
+      setError(normalizeAppError(saveError, language, t.passwordError));
     }
   }
 
@@ -350,7 +351,7 @@ export function ProfilePage({ language, preferences, onPreferencesChange }: Prof
           <Stack spacing={1}>
             {history.map((item) => (
               <Typography key={item.id} variant="body2">
-                {item.title} | {item.status} | {new Date(item.createdAt).toLocaleString()}
+                {item.title} | {formatMediaStatus(item.status, language)} | {formatDateTime(item.createdAt, language)}
               </Typography>
             ))}
             {!history.length && <Typography color="text.secondary">{t.noActivity}</Typography>}

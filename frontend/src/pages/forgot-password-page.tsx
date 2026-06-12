@@ -2,6 +2,7 @@ import { Alert, Box, Button, Chip, Container, Paper, Stack, TextField, Typograph
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { normalizeAppError } from "../i18n/ui-text";
 
 interface ForgotPasswordPageProps {
   language: "en" | "ru";
@@ -47,7 +48,7 @@ export function ForgotPasswordPage({ language }: ForgotPasswordPageProps) {
       await api.forgotPassword(email);
       setSuccess(t.success);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : t.failed);
+      setError(normalizeAppError(submitError, language, t.failed));
     }
   }
 

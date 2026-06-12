@@ -12,9 +12,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import { formatMediaType, normalizeAppError } from "../i18n/ui-text";
 import type { MediaType } from "../types/domain";
 
-const mediaTypes: MediaType[] = ["IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"];
+const mediaTypes: MediaType[] = ["IMAGE", "VIDEO", "AUDIO"];
 
 interface UploadPageProps {
   language: "en" | "ru";
@@ -24,6 +25,7 @@ const copy = {
   en: {
     title: "Upload file",
     chooseFileOrUrl: "Choose file or provide URL",
+    titleRequired: "Enter a title",
     uploadFailed: "Upload failed",
     titleLabel: "Title",
     mediaType: "Media type",
@@ -41,6 +43,7 @@ const copy = {
   ru: {
     title: "Загрузить файл",
     chooseFileOrUrl: "Выберите файл или укажите URL",
+    titleRequired: "Укажите название",
     uploadFailed: "Не удалось загрузить файл",
     titleLabel: "Название",
     mediaType: "Тип медиа",
@@ -74,6 +77,11 @@ export function UploadPage({ language }: UploadPageProps) {
 
   async function submit() {
     if (!token) return;
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
+      setError(t.titleRequired);
+      return;
+    }
     if (!file && !fileUrl.trim()) {
       setError(t.chooseFileOrUrl);
       return;
@@ -84,7 +92,7 @@ export function UploadPage({ language }: UploadPageProps) {
     try {
       const uploaded = await api.uploadMedia(
         {
-          title,
+          title: normalizedTitle,
           description,
           type,
           category: category || undefined,
@@ -102,7 +110,7 @@ export function UploadPage({ language }: UploadPageProps) {
       }
       navigate("/dashboard");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : t.uploadFailed);
+      setError(normalizeAppError(submitError, language, t.uploadFailed));
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +150,7 @@ export function UploadPage({ language }: UploadPageProps) {
             >
               {mediaTypes.map((option) => (
                 <MenuItem key={option} value={option}>
-                  {option}
+                  {formatMediaType(option, language)}
                 </MenuItem>
               ))}
             </TextField>
@@ -199,7 +207,7 @@ export function UploadPage({ language }: UploadPageProps) {
           <Button
             variant="contained"
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || !title.trim()}
             sx={{ alignSelf: "flex-start", minWidth: 220 }}
           >
             {t.submit}

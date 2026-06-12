@@ -27,8 +27,13 @@ import {
 } from "../analyzer/analyzer-client.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  ANALYZER_VIOLATION_PENALTIES,
+  ANALYZER_VIOLATION_TO_CRITERIA,
+} from "../quality/analyzer-rule-maps";
 import { StorageService } from "../storage/storage.service";
 import { ListMediaQueryDto } from "./dto/list-media-query.dto";
+import { SendForCheckDto } from "./dto/send-for-check.dto";
 import { UpdateMediaVersionDto } from "./dto/update-media-version.dto";
 import { UploadMediaDto } from "./dto/upload-media.dto";
 
@@ -41,12 +46,48 @@ const SUPPORTED_EXTENSIONS: Record<MediaType, string[]> = {
 };
 
 const MAX_UPLOAD_SIZE = 100 * 1024 * 1024;
+const DISABLED_CRITERIA_CODES = [
+  "PUBLICATION_RULES",
+  "VIDEO_SHARPNESS",
+  "TEXT_SPELLING_PROXY",
+  "TEXT_FORBIDDEN_LEXICON",
+  "TEXT_LENGTH",
+  "TEXT_TEMPLATE",
+  "TEXT_READABILITY",
+] as const;
 
 interface ResolvedSource {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
   buffer: Buffer;
+}
+
+interface TemplateRenderRule {
+  id: string;
+  name: string;
+  fileNamePattern: string;
+  mediaType: MediaType;
+  expectedContainer?: string;
+  expectedVideoCodec?: string;
+  expectedAudioCodec?: string;
+  expectedWidth?: string;
+  expectedHeight?: string;
+  expectedFps?: string;
+  expectedBitrateKbps?: string;
+  expectedMinDurationSec?: string;
+  expectedMaxDurationSec?: string;
+}
+
+interface TemplateProfileRequirements {
+  maxFileSizeMb?: string;
+  allowedContainers?: string[];
+  allowedVideoCodecs?: string[];
+  allowedAudioCodecs?: string[];
+  expectedFps?: string;
+  expectedMinBitrateKbps?: string;
+  expectedMaxBitrateKbps?: string;
+  requireAudio?: boolean;
 }
 
 @Injectable()
@@ -81,7 +122,7 @@ export class MediaService {
 
     const media = await this.prisma.mediaItem.create({
       data: {
-        title: dto.title,
+        title: dto.title.trim(),
         description: dto.description,
         type: inferredType,
         ownerId: user.sub,
@@ -172,7 +213,7 @@ export class MediaService {
       return transaction.mediaItem.update({
         where: { id: media.id },
         data: {
-          title: dto.title ?? media.title,
+          title: dto.title?.trim() ? dto.title.trim() : media.title,
           description: dto.description ?? media.description,
           type: inferredType,
           fileName: source.fileName,
@@ -289,15 +330,22 @@ export class MediaService {
     };
   }
 
-  async sendToAutomaticCheck(id: string, user: JwtPayload) {
+  async sendToAutomaticCheck(id: string, user: JwtPayload, options?: SendForCheckDto) {
     const media = await this.prisma.mediaItem.findUnique({ where: { id } });
     if (!media) throw new NotFoundException("Media not found");
     await this.assertCanEditMedia(media.id, user);
 
     const criteria = await this.prisma.qualityRule.findMany({
-      where: { kind: QualityRuleKind.CRITERION, isActive: true },
+      where: {
+        kind: QualityRuleKind.CRITERION,
+        isActive: true,
+        code: { notIn: [...DISABLED_CRITERIA_CODES] },
+      },
       orderBy: { code: "asc" },
     });
+
+    const selectedCriteria = this.selectCriteria(criteria, options?.criteriaCodes);
+    const templateId = options?.templateId ?? "custom";
 
     await this.prisma.mediaItem.update({
       where: { id },
@@ -313,7 +361,7 @@ export class MediaService {
 
     const result = await this.analyzerClient.analyze({
       mediaType: media.type,
-      title: media.title,
+      title: media.title.trim() || media.fileName,
       description: media.description ?? undefined,
       mimeType: media.mimeType,
       sizeBytes: media.sizeBytes,
@@ -322,26 +370,32 @@ export class MediaService {
       duplicateHint: duplicateCount > 0,
     });
 
-    const finalStatus = this.mapRecommendationToStatus(result);
+    const filteredResult = this.filterAnalyzeResult(result, selectedCriteria);
+    this.applyTemplateProfileRules(media.sizeBytes, media.type, filteredResult, options?.profileRequirements);
+    this.applyTemplateRenderRules(media.fileName, media.type, filteredResult, options?.renderRules, options?.profileRequirements);
+    const finalStatus = this.mapRecommendationToStatus(filteredResult);
     const qualityCheck = await this.prisma.qualityCheck.create({
       data: {
         mediaItemId: media.id,
         initiatedById: user.sub,
         status: CheckStatus.COMPLETED,
         mediaVersion: media.version,
-        criteria: criteria.map((criterion) => ({
+        criteria: {
+          templateId,
+          items: selectedCriteria.map((criterion) => ({
           code: criterion.code,
           name: criterion.name,
           weight: criterion.weight,
-        })) as Prisma.InputJsonValue,
-        autoResult: result.details as Prisma.InputJsonValue,
-        autoScore: result.score,
-        finalScore: result.score,
+          })),
+        } as Prisma.InputJsonValue,
+        autoResult: filteredResult.details as Prisma.InputJsonValue,
+        autoScore: filteredResult.score,
+        finalScore: filteredResult.score,
         finishedAt: new Date(),
       },
     });
 
-    await this.persistViolations(media.id, media.version, qualityCheck.id, result.violations);
+    await this.persistViolations(media.id, media.version, qualityCheck.id, filteredResult.violations);
 
     const updatedMedia = await this.prisma.mediaItem.update({
       where: { id: media.id },
@@ -352,7 +406,7 @@ export class MediaService {
       userId: media.ownerId,
       type: "AUTO_CHECK_FINISHED",
       title: "Automatic check finished",
-      message: `Automatic check for "${media.title}" is completed. Score: ${result.score}.`,
+      message: `Automatic check for "${media.title}" is completed. Score: ${filteredResult.score}.`,
       alsoEmail: true,
     });
 
@@ -373,9 +427,10 @@ export class MediaService {
       entityId: media.id,
       metadata: {
         score: result.score,
-        violations: result.violations,
+        violations: filteredResult.violations,
         status: updatedMedia.status,
         duplicateHint: duplicateCount > 0,
+        templateId,
       },
     });
 
@@ -641,6 +696,311 @@ export class MediaService {
     if (result.recommendation === "approved") return MediaStatus.AUTO_CHECKED;
     if (result.recommendation === "manual_review") return MediaStatus.NEEDS_MANUAL_MODERATION;
     return MediaStatus.ON_REVISION;
+  }
+
+  private selectCriteria(
+    allCriteria: Array<{ code: string; name: string; weight: number | null }>,
+    selectedCodes?: string[],
+  ) {
+    if (!selectedCodes?.length) return allCriteria;
+    const codeSet = new Set(selectedCodes.map((code) => code.trim().toUpperCase()).filter(Boolean));
+    const filtered = allCriteria.filter((criterion) => codeSet.has(criterion.code));
+    return filtered.length ? filtered : allCriteria;
+  }
+
+  private filterAnalyzeResult(
+    result: AnalyzeResponse,
+    selectedCriteria: Array<{ code: string; name: string; weight: number | null }>,
+  ): AnalyzeResponse {
+    const selectedAnalyzerCriteria = new Set(
+      selectedCriteria.map((criterion) => criterion.code.toLowerCase()),
+    );
+
+    const filteredViolations = [...new Set(result.violations)].filter((code) => {
+      const normalizedCode = code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+      const mappedCriteria = ANALYZER_VIOLATION_TO_CRITERIA[normalizedCode] ?? [];
+      return mappedCriteria.some((criterion) => selectedAnalyzerCriteria.has(criterion));
+    });
+
+    const score = Math.max(
+      0,
+      Math.min(
+        1,
+        Number(
+          (
+            1 -
+            filteredViolations.reduce((sum, code) => {
+              const normalizedCode = code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+              return sum + (ANALYZER_VIOLATION_PENALTIES[normalizedCode] ?? 0);
+            }, 0)
+          ).toFixed(3),
+        ),
+      ),
+    );
+
+    const violationReasons =
+      typeof result.details?.violationReasons === "object" && result.details?.violationReasons
+        ? Object.fromEntries(
+            Object.entries(result.details.violationReasons as Record<string, unknown>).filter(
+              ([code]) => filteredViolations.includes(code),
+            ),
+          )
+        : {};
+
+    const checkedCriteria = Array.isArray(result.details?.checkedCriteria)
+      ? (result.details.checkedCriteria as string[]).filter((criterion) =>
+          selectedAnalyzerCriteria.has(String(criterion)),
+        )
+      : [];
+
+    const filteredResult: AnalyzeResponse = {
+      ...result,
+      score,
+      violations: filteredViolations,
+      recommendation:
+        score >= 0.85 && filteredViolations.length === 0
+          ? "approved"
+          : score >= 0.6
+            ? "manual_review"
+            : "reject",
+      details: {
+        ...result.details,
+        checkedCriteria,
+        violationReasons,
+      },
+    };
+
+    return filteredResult;
+  }
+
+  private applyTemplateProfileRules(
+    sizeBytes: number,
+    mediaType: MediaType,
+    result: AnalyzeResponse,
+    profile?: TemplateProfileRequirements,
+  ) {
+    if (!profile) return;
+
+    if (profile.maxFileSizeMb && sizeBytes > Number(profile.maxFileSizeMb) * 1024 * 1024) {
+      this.pushTemplateViolation(
+        result,
+        "TEMPLATE_FILE_SIZE_MISMATCH",
+        0.12,
+        `Expected file size <= ${profile.maxFileSizeMb} MB`,
+      );
+    }
+
+    if (mediaType === MediaType.VIDEO) {
+      const metrics = (result.details.videoMetrics ?? {}) as Record<string, unknown>;
+      const fps = Number(metrics.fps ?? 0);
+      const bitrateKbps = Number(metrics.estimatedBitrate ?? 0) / 1000;
+      const container = String(metrics.container ?? "").toLowerCase();
+      const videoCodec = String(metrics.codec ?? "").toUpperCase();
+      const hasAudio = Boolean(metrics.hasAudio);
+      const audioCodec = String(metrics.audioCodec ?? "").toUpperCase();
+
+      if (profile.expectedFps && Math.abs(fps - Number(profile.expectedFps)) > 0.05) {
+        this.pushTemplateViolation(result, "TEMPLATE_VIDEO_FPS_MISMATCH", 0.12, `Expected FPS ${profile.expectedFps}, got ${fps}`);
+      }
+      if (profile.expectedMinBitrateKbps && bitrateKbps < Number(profile.expectedMinBitrateKbps)) {
+        this.pushTemplateViolation(
+          result,
+          "TEMPLATE_VIDEO_BITRATE_MIN_MISMATCH",
+          0.1,
+          `Expected bitrate >= ${profile.expectedMinBitrateKbps} kbps, got ${Math.round(bitrateKbps)}`,
+        );
+      }
+      if (profile.expectedMaxBitrateKbps && bitrateKbps > Number(profile.expectedMaxBitrateKbps)) {
+        this.pushTemplateViolation(
+          result,
+          "TEMPLATE_VIDEO_BITRATE_MAX_MISMATCH",
+          0.1,
+          `Expected bitrate <= ${profile.expectedMaxBitrateKbps} kbps, got ${Math.round(bitrateKbps)}`,
+        );
+      }
+      if (profile.allowedContainers?.length && !profile.allowedContainers.some((item) => item.trim().toLowerCase() === container)) {
+        this.pushTemplateViolation(
+          result,
+          "TEMPLATE_VIDEO_CONTAINER_MISMATCH",
+          0.08,
+          `Expected one of ${profile.allowedContainers.join(", ")}, got ${container}`,
+        );
+      }
+      if (profile.allowedVideoCodecs?.length && !profile.allowedVideoCodecs.some((item) => item.trim().toUpperCase() === videoCodec)) {
+        this.pushTemplateViolation(
+          result,
+          "TEMPLATE_VIDEO_CODEC_MISMATCH",
+          0.08,
+          `Expected one of ${profile.allowedVideoCodecs.join(", ")}, got ${videoCodec}`,
+        );
+      }
+      if (profile.requireAudio !== undefined && profile.requireAudio !== hasAudio) {
+        this.pushTemplateViolation(
+          result,
+          "TEMPLATE_AUDIO_PRESENCE_MISMATCH",
+          0.1,
+          `Expected audio presence ${profile.requireAudio}, got ${hasAudio}`,
+        );
+      }
+      if (
+        profile.requireAudio &&
+        profile.allowedAudioCodecs?.length &&
+        audioCodec &&
+        !profile.allowedAudioCodecs.some((item) => item.trim().toUpperCase() === audioCodec)
+      ) {
+        this.pushTemplateViolation(
+          result,
+          "TEMPLATE_AUDIO_CODEC_MISMATCH",
+          0.08,
+          `Expected one of ${profile.allowedAudioCodecs.join(", ")}, got ${audioCodec}`,
+        );
+      }
+    }
+  }
+
+  private applyTemplateRenderRules(
+    fileName: string,
+    mediaType: MediaType,
+    result: AnalyzeResponse,
+    renderRules?: TemplateRenderRule[],
+    profile?: TemplateProfileRequirements,
+  ) {
+    const rulesForType = (renderRules ?? []).filter((rule) => rule.mediaType === mediaType);
+    if (!rulesForType.length) return;
+
+    const matchedRule = rulesForType.find((rule) => this.matchesFilePattern(fileName, rule.fileNamePattern));
+    if (!matchedRule) {
+      this.pushTemplateViolation(
+        result,
+        "TEMPLATE_RENDER_NOT_FOUND",
+        0.18,
+        `No render rule matched file name ${fileName}`,
+      );
+      return;
+    }
+
+    if (mediaType === MediaType.VIDEO) {
+      this.applyVideoRenderRule(result, matchedRule, profile);
+    }
+
+    if (mediaType === MediaType.IMAGE) {
+      this.applyImageRenderRule(result, matchedRule);
+    }
+  }
+
+  private applyVideoRenderRule(
+    result: AnalyzeResponse,
+    rule: TemplateRenderRule,
+    profile?: TemplateProfileRequirements,
+  ) {
+    const metrics = (result.details.videoMetrics ?? {}) as Record<string, unknown>;
+    const width = Number(metrics.width ?? 0);
+    const height = Number(metrics.height ?? 0);
+    const fps = Number(metrics.fps ?? 0);
+    const bitrateKbps = Number(metrics.estimatedBitrate ?? 0) / 1000;
+    const durationSec = Number(metrics.durationSec ?? 0);
+    const container = String(metrics.container ?? "").toLowerCase();
+    const codec = String(metrics.codec ?? "").toUpperCase();
+
+    if (rule.expectedWidth && width !== Number(rule.expectedWidth)) {
+      this.pushTemplateViolation(result, "TEMPLATE_VIDEO_WIDTH_MISMATCH", 0.12, `Expected width ${rule.expectedWidth}, got ${width}`);
+    }
+    if (rule.expectedHeight && height !== Number(rule.expectedHeight)) {
+      this.pushTemplateViolation(result, "TEMPLATE_VIDEO_HEIGHT_MISMATCH", 0.12, `Expected height ${rule.expectedHeight}, got ${height}`);
+    }
+    if (!profile?.expectedFps && rule.expectedFps && Math.abs(fps - Number(rule.expectedFps)) > 0.05) {
+      this.pushTemplateViolation(result, "TEMPLATE_VIDEO_FPS_MISMATCH", 0.12, `Expected FPS ${rule.expectedFps}, got ${fps}`);
+    }
+    if (rule.expectedBitrateKbps && bitrateKbps < Number(rule.expectedBitrateKbps)) {
+      this.pushTemplateViolation(
+        result,
+        "TEMPLATE_VIDEO_BITRATE_MISMATCH",
+        0.1,
+        `Expected bitrate >= ${rule.expectedBitrateKbps} kbps, got ${Math.round(bitrateKbps)}`,
+      );
+    }
+    if (rule.expectedMinDurationSec && durationSec < Number(rule.expectedMinDurationSec)) {
+      this.pushTemplateViolation(
+        result,
+        "TEMPLATE_VIDEO_DURATION_MIN_MISMATCH",
+        0.08,
+        `Expected duration >= ${rule.expectedMinDurationSec} sec, got ${durationSec}`,
+      );
+    }
+    if (rule.expectedMaxDurationSec && durationSec > Number(rule.expectedMaxDurationSec)) {
+      this.pushTemplateViolation(
+        result,
+        "TEMPLATE_VIDEO_DURATION_MAX_MISMATCH",
+        0.08,
+        `Expected duration <= ${rule.expectedMaxDurationSec} sec, got ${durationSec}`,
+      );
+    }
+    if (rule.expectedContainer && container && container !== rule.expectedContainer.trim().toLowerCase()) {
+      this.pushTemplateViolation(
+        result,
+        "TEMPLATE_VIDEO_CONTAINER_MISMATCH",
+        0.08,
+        `Expected container ${rule.expectedContainer}, got ${container}`,
+      );
+    }
+    if (rule.expectedVideoCodec && codec && codec !== rule.expectedVideoCodec.trim().toUpperCase()) {
+      this.pushTemplateViolation(
+        result,
+        "TEMPLATE_VIDEO_CODEC_MISMATCH",
+        0.08,
+        `Expected codec ${rule.expectedVideoCodec}, got ${codec}`,
+      );
+    }
+  }
+
+  private applyImageRenderRule(result: AnalyzeResponse, rule: TemplateRenderRule) {
+    const metrics = (result.details.imageResolution ?? {}) as Record<string, unknown>;
+    const width = Number(metrics.width ?? 0);
+    const height = Number(metrics.height ?? 0);
+
+    if (rule.expectedWidth && width !== Number(rule.expectedWidth)) {
+      this.pushTemplateViolation(result, "TEMPLATE_IMAGE_WIDTH_MISMATCH", 0.12, `Expected width ${rule.expectedWidth}, got ${width}`);
+    }
+    if (rule.expectedHeight && height !== Number(rule.expectedHeight)) {
+      this.pushTemplateViolation(result, "TEMPLATE_IMAGE_HEIGHT_MISMATCH", 0.12, `Expected height ${rule.expectedHeight}, got ${height}`);
+    }
+  }
+
+  private pushTemplateViolation(
+    result: AnalyzeResponse,
+    code: string,
+    penalty: number,
+    reason: string,
+  ) {
+    if (!result.violations.includes(code)) {
+      result.violations.push(code);
+    }
+    result.details.violationReasons = {
+      ...((result.details.violationReasons as Record<string, string> | undefined) ?? {}),
+      [code]: reason,
+    };
+    result.score = Math.max(0, Number((result.score - penalty).toFixed(3)));
+    result.recommendation =
+      result.score >= 0.85 && result.violations.length === 0
+        ? "approved"
+        : result.score >= 0.6
+          ? "manual_review"
+          : "reject";
+  }
+
+  private matchesFilePattern(fileName: string, pattern: string) {
+    const normalize = (value: string) =>
+      value.trim().replace(/×/g, "x");
+
+    const normalizedPattern = normalize(pattern);
+    if (!normalizedPattern) return false;
+
+    const escaped = normalizedPattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+    const matcher = new RegExp(`^${escaped}$`, "i");
+    const normalizedFileName = normalize(fileName);
+    const fileNameWithoutExtension = normalizedFileName.replace(/\.[^.]+$/, "");
+
+    return matcher.test(normalizedFileName) || matcher.test(fileNameWithoutExtension);
   }
 
   private async persistViolations(
