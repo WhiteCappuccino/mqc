@@ -14,6 +14,13 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import {
+  getCheckTemplateMeta,
+  getCustomCheckTemplates,
+  getFavoriteTemplateIds,
+  setFavoriteTemplateIds,
+  type CheckTemplate,
+} from "../check/check-templates";
 import { formatMediaStatus, formatMediaType, normalizeAppError } from "../i18n/ui-text";
 import type { MediaItem } from "../types/domain";
 
@@ -29,6 +36,9 @@ const copy = {
     empty: "No favorites yet",
     loadError: "Failed to load favorites",
     removeError: "Failed to remove",
+    removeTemplate: "Remove template",
+    templates: "Favorite templates",
+    noTemplates: "No favorite templates yet",
     previewUnavailable: "Preview unavailable",
     untitled: "Untitled file",
   },
@@ -39,6 +49,9 @@ const copy = {
     empty: "Пока нет избранного",
     loadError: "Не удалось загрузить избранное",
     removeError: "Не удалось удалить",
+    removeTemplate: "Убрать шаблон",
+    templates: "Избранные шаблоны",
+    noTemplates: "Пока нет избранных шаблонов",
     previewUnavailable: "Превью недоступно",
     untitled: "Файл без названия",
   },
@@ -167,6 +180,7 @@ export function FavoritesPage({ language }: FavoritesPageProps) {
   const { token } = useAuth();
   const t = copy[language];
   const [items, setItems] = useState<MediaItem[]>([]);
+  const [templates, setTemplates] = useState<CheckTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -175,8 +189,17 @@ export function FavoritesPage({ language }: FavoritesPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const favorites = await api.listFavorites(token);
+      const [favorites, templateResponse] = await Promise.all([
+        api.listFavorites(token),
+        api.listCheckTemplates(token),
+      ]);
       setItems(favorites.map((entry) => entry.mediaItem));
+      const favoriteTemplateIds = getFavoriteTemplateIds();
+      const mergedTemplates = [
+        ...(templateResponse as CheckTemplate[]).map((template) => ({ ...template, source: "system" as const })),
+        ...getCustomCheckTemplates(),
+      ];
+      setTemplates(mergedTemplates.filter((template) => favoriteTemplateIds.includes(template.id)));
     } catch (loadError) {
       setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
@@ -199,6 +222,12 @@ export function FavoritesPage({ language }: FavoritesPageProps) {
     }
   }
 
+  function removeTemplate(templateId: string) {
+    const next = getFavoriteTemplateIds().filter((id) => id !== templateId);
+    setFavoriteTemplateIds(next);
+    setTemplates((current) => current.filter((template) => template.id !== templateId));
+  }
+
   if (loading) {
     return (
       <Stack sx={{ alignItems: "center", mt: 4 }}>
@@ -211,6 +240,34 @@ export function FavoritesPage({ language }: FavoritesPageProps) {
     <Stack spacing={2}>
       <Typography variant="h2">{t.title}</Typography>
       {error && <Alert severity="error">{error}</Alert>}
+      <Card>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 1.5 }}>
+            {t.templates}
+          </Typography>
+          <Stack spacing={1.5}>
+            {templates.map((template) => {
+              const meta = getCheckTemplateMeta(template, language);
+              return (
+                <Card key={template.id} variant="outlined">
+                  <CardContent>
+                    <Stack spacing={1}>
+                      <Typography variant="subtitle1">{meta.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {meta.description}
+                      </Typography>
+                      <Button color="error" onClick={() => removeTemplate(template.id)} sx={{ alignSelf: "flex-start", px: 0 }}>
+                        {t.removeTemplate}
+                      </Button>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              );
+            })}
+            {!templates.length && <Typography color="text.secondary">{t.noTemplates}</Typography>}
+          </Stack>
+        </CardContent>
+      </Card>
       {items.map((item) => (
         <Card key={item.id}>
           <CardContent>

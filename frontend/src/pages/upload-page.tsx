@@ -15,7 +15,7 @@ import { useAuth } from "../auth/auth-context";
 import { formatMediaType, normalizeAppError } from "../i18n/ui-text";
 import type { MediaType } from "../types/domain";
 
-const mediaTypes: MediaType[] = ["IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"];
+const mediaTypes: MediaType[] = ["IMAGE", "VIDEO", "AUDIO"];
 
 interface UploadPageProps {
   language: "en" | "ru";

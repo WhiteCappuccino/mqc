@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
 import {
+  formatDateTime,
   formatNotificationChannel,
   formatNotificationMessage,
   formatNotificationTitle,
@@ -117,7 +118,7 @@ export function NotificationsPage({ language }: NotificationsPageProps) {
               {formatNotificationMessage(item.message, language)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {new Date(item.createdAt).toLocaleString()}
+              {formatDateTime(item.createdAt, language)}
             </Typography>
           </CardContent>
           {!item.isRead && (

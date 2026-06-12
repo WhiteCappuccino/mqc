@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
+import { getCustomCheckTemplates, type CheckTemplate } from "../check/check-templates";
 import { formatAccessLevel, formatMediaType, normalizeAppError } from "../i18n/ui-text";
 import type { AccessLevel, CollectionItem, MediaItem } from "../types/domain";
 
@@ -56,6 +57,13 @@ const copy = {
     updateError: "Failed to update collection",
     removeItemError: "Failed to remove item",
     removeCollaboratorError: "Failed to remove collaborator",
+    runCollectionCheck: "Run collection check",
+    runCheck: "Run checks",
+    runCheckError: "Failed to run collection check",
+    mediaTypeFilter: "Media type in collection",
+    templateForType: "Template for type",
+    allTypes: "All types",
+    done: "Done",
     noCollections: "No collections yet",
     noMediaAvailable: "No available media",
     previewUnavailable: "Preview unavailable",
@@ -89,6 +97,13 @@ const copy = {
     updateError: "Не удалось обновить коллекцию",
     removeItemError: "Не удалось убрать элемент",
     removeCollaboratorError: "Не удалось удалить участника",
+    runCollectionCheck: "Проверка коллекции",
+    runCheck: "Запустить проверки",
+    runCheckError: "Не удалось запустить проверку коллекции",
+    mediaTypeFilter: "Тип медиа в коллекции",
+    templateForType: "Шаблон для типа",
+    allTypes: "Все типы",
+    done: "Готово",
     noCollections: "Коллекций пока нет",
     noMediaAvailable: "Нет доступных медиафайлов",
     previewUnavailable: "Превью недоступно",
@@ -208,6 +223,9 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
   const [mediaOptions, setMediaOptions] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<CheckTemplate[]>([]);
+  const [busyCollectionId, setBusyCollectionId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPrivate, setIsPrivate] = useState(true);
@@ -218,18 +236,25 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
   const [editName, setEditName] = useState<Record<string, string>>({});
   const [editDescription, setEditDescription] = useState<Record<string, string>>({});
   const [editPrivate, setEditPrivate] = useState<Record<string, boolean>>({});
+  const [collectionCheckType, setCollectionCheckType] = useState<Record<string, string>>({});
+  const [collectionTemplateByType, setCollectionTemplateByType] = useState<Record<string, Record<string, string>>>({});
 
   async function load() {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const [collections, media] = await Promise.all([
+      const [collections, media, templateResponse] = await Promise.all([
         api.listCollections(token),
         api.listMedia(token),
+        api.listCheckTemplates(token),
       ]);
       setItems(collections);
       setMediaOptions(media);
+      setTemplates([
+        ...(templateResponse as CheckTemplate[]).map((template) => ({ ...template, source: "system" as const })),
+        ...getCustomCheckTemplates(),
+      ]);
     } catch (loadError) {
       setError(normalizeAppError(loadError, language, t.loadError));
     } finally {
@@ -244,6 +269,7 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
   async function create() {
     if (!token) return;
     setError(null);
+    setSuccess(null);
     try {
       await api.createCollection({ name, description, isPrivate }, token);
       setName("");
@@ -259,6 +285,7 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
     const targetMedia = mediaId[collectionId];
     if (!targetMedia) return;
     setError(null);
+    setSuccess(null);
     try {
       await api.addCollectionItem(collectionId, targetMedia, token);
       setMediaId((prev) => ({ ...prev, [collectionId]: "" }));
@@ -273,6 +300,7 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
     const email = shareEmail[collectionId];
     if (!email) return;
     setError(null);
+    setSuccess(null);
     try {
       await api.shareCollection(
         collectionId,
@@ -292,6 +320,7 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
   async function remove(collectionId: string) {
     if (!token) return;
     setError(null);
+    setSuccess(null);
     try {
       await api.deleteCollection(collectionId, token);
       await load();
@@ -303,6 +332,7 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
   async function update(collectionId: string) {
     if (!token) return;
     setError(null);
+    setSuccess(null);
     try {
       await api.updateCollection(
         collectionId,
@@ -322,6 +352,7 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
   async function removeItem(collectionId: string, mediaItemId: string) {
     if (!token) return;
     setError(null);
+    setSuccess(null);
     try {
       await api.removeCollectionItem(collectionId, mediaItemId, token);
       await load();
@@ -333,11 +364,55 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
   async function removeCollaborator(collectionId: string, userId: string) {
     if (!token) return;
     setError(null);
+    setSuccess(null);
     try {
       await api.removeCollectionCollaborator(collectionId, userId, token);
       await load();
     } catch (actionError) {
       setError(normalizeAppError(actionError, language, t.removeCollaboratorError));
+    }
+  }
+
+  async function runCollectionChecks(collection: CollectionItem) {
+    if (!token) return;
+    const itemsInCollection = collection.items ?? [];
+    const selectedType = collectionCheckType[collection.id] ?? "";
+    const filteredItems = selectedType
+      ? itemsInCollection.filter((entry) => entry.mediaItem.type === selectedType)
+      : itemsInCollection;
+
+    if (!filteredItems.length) return;
+
+    setError(null);
+    setSuccess(null);
+    setBusyCollectionId(collection.id);
+    try {
+      const mediaByType = new Map<string, typeof filteredItems>();
+      filteredItems.forEach((entry) => {
+        const key = entry.mediaItem.type;
+        mediaByType.set(key, [...(mediaByType.get(key) ?? []), entry]);
+      });
+
+      for (const [type, groupedItems] of mediaByType.entries()) {
+        const templateId = collectionTemplateByType[collection.id]?.[type];
+        const template = templates.find((entry) => entry.id === templateId);
+        await Promise.all(
+          groupedItems.map((entry) =>
+            api.sendForCheck(entry.mediaItemId, token, {
+              templateId: template?.id,
+              criteriaCodes: template?.criteriaCodes,
+              profileRequirements: template?.profileRequirements,
+              renderRules: template?.renderRules,
+            }),
+          ),
+        );
+      }
+
+      setSuccess(t.done);
+    } catch (actionError) {
+      setError(normalizeAppError(actionError, language, t.runCheckError));
+    } finally {
+      setBusyCollectionId(null);
     }
   }
 
@@ -353,6 +428,7 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
     <Stack spacing={2}>
       <Typography variant="h2">{t.title}</Typography>
       {error && <Alert severity="error">{error}</Alert>}
+      {success && <Alert severity="success">{success}</Alert>}
 
       <Card>
         <CardContent>
@@ -390,6 +466,76 @@ export function CollectionsPage({ language }: CollectionsPageProps) {
             <Typography variant="body2" sx={{ mt: 1 }}>
               {item.isPrivate ? t.private : t.public} | {t.items}: {item.items?.length ?? 0}
             </Typography>
+            <Stack spacing={1.5} sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">{t.runCollectionCheck}</Typography>
+              <TextField
+                select
+                size="small"
+                label={t.mediaTypeFilter}
+                value={collectionCheckType[item.id] ?? ""}
+                onChange={(event) =>
+                  setCollectionCheckType((prev) => ({ ...prev, [item.id]: event.target.value }))
+                }
+                sx={{ maxWidth: 320 }}
+              >
+                <MenuItem value="">{t.allTypes}</MenuItem>
+                {[...new Set((item.items ?? []).map((entry) => entry.mediaItem.type))]
+                  .filter((type) => ["IMAGE", "VIDEO", "AUDIO"].includes(type))
+                  .map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {formatMediaType(type as MediaItem["type"], language)}
+                    </MenuItem>
+                  ))}
+              </TextField>
+              <Stack
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                  gap: 1,
+                }}
+              >
+                {[...new Set(
+                  (item.items ?? [])
+                    .map((entry) => entry.mediaItem.type)
+                    .filter((type) => !collectionCheckType[item.id] || type === collectionCheckType[item.id]),
+                )]
+                  .filter((type) => ["IMAGE", "VIDEO", "AUDIO"].includes(type))
+                  .map((type) => (
+                    <TextField
+                      key={`${item.id}-${type}`}
+                      select
+                      size="small"
+                      label={`${t.templateForType}: ${formatMediaType(type as MediaItem["type"], language)}`}
+                      value={collectionTemplateByType[item.id]?.[type] ?? ""}
+                      onChange={(event) =>
+                        setCollectionTemplateByType((prev) => ({
+                          ...prev,
+                          [item.id]: {
+                            ...(prev[item.id] ?? {}),
+                            [type]: event.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      {templates
+                        .filter((template) => template.appliesTo.includes(type as MediaItem["type"]))
+                        .map((template) => (
+                          <MenuItem key={template.id} value={template.id}>
+                            {template.name ?? template.id}
+                          </MenuItem>
+                        ))}
+                    </TextField>
+                  ))}
+              </Stack>
+              <Button
+                variant="contained"
+                onClick={() => void runCollectionChecks(item)}
+                disabled={busyCollectionId === item.id}
+                sx={{ alignSelf: "flex-start" }}
+              >
+                {t.runCheck}
+              </Button>
+            </Stack>
             <Stack spacing={1} sx={{ mt: 2 }}>
               <Box
                 sx={{

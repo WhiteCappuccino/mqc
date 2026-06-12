@@ -101,6 +101,31 @@ export interface UploadMediaVersionPayload {
 export interface SendForCheckPayload {
   templateId?: string;
   criteriaCodes?: string[];
+  profileRequirements?: {
+    maxFileSizeMb?: string;
+    allowedContainers?: string[];
+    allowedVideoCodecs?: string[];
+    allowedAudioCodecs?: string[];
+    expectedFps?: string;
+    expectedMinBitrateKbps?: string;
+    expectedMaxBitrateKbps?: string;
+    requireAudio?: boolean;
+  };
+  renderRules?: Array<{
+    id: string;
+    name: string;
+    fileNamePattern: string;
+    mediaType: MediaType;
+    expectedContainer?: string;
+    expectedVideoCodec?: string;
+    expectedAudioCodec?: string;
+    expectedWidth?: string;
+    expectedHeight?: string;
+    expectedFps?: string;
+    expectedBitrateKbps?: string;
+    expectedMinDurationSec?: string;
+    expectedMaxDurationSec?: string;
+  }>;
 }
 
 export interface CheckTemplatePayload {
@@ -459,7 +484,6 @@ export const api = {
       code: string;
       name: string;
       description?: string;
-      weight?: number;
       isActive?: boolean;
     },
     token: string,
@@ -511,6 +535,8 @@ export const api = {
       actorId?: string;
       action?: string;
       entityType?: string;
+      dateFrom?: string;
+      dateTo?: string;
     },
   ) {
     return request(`/admin/audit-logs${toQueryString(query)}`, { method: "GET" }, token);

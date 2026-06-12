@@ -171,6 +171,13 @@ export class AdminService {
               mode: "insensitive",
             }
           : undefined,
+        createdAt:
+          query.dateFrom || query.dateTo
+            ? {
+                gte: query.dateFrom ? new Date(query.dateFrom) : undefined,
+                lte: query.dateTo ? new Date(query.dateTo) : undefined,
+              }
+            : undefined,
       },
       include: {
         actor: {

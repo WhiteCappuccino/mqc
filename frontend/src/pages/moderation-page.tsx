@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
 import {
+  formatDateTime,
   formatMediaStatus,
   formatMediaType,
   formatSeverity,
@@ -222,7 +223,7 @@ export function ModerationPage({ language }: ModerationPageProps) {
                 <Typography variant="body2" sx={{ flexGrow: 1 }}>
                   {formatSeverity(entry.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL", language)} |{" "}
                   {formatViolationCode(entry.type, language)} | {entry.mediaItem?.title ?? t.unknown} |{" "}
-                  {new Date(entry.createdAt).toLocaleString()}
+                  {formatDateTime(entry.createdAt, language)}
                   {entry.isFalsePositive ? ` | ${t.falsePositive}` : ""}
                 </Typography>
                 <Button

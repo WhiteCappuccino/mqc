@@ -9,20 +9,14 @@ export interface CheckTemplatePreset {
 const COMMON_CRITERIA = [
   "TECHNICAL_REQUIREMENTS",
   "METADATA_QUALITY",
-  "PUBLICATION_RULES",
   "DUPLICATION",
 ] as const;
 
 export const CHECK_TEMPLATE_PRESETS: CheckTemplatePreset[] = [
   {
     id: "basic",
-    appliesTo: [MediaType.IMAGE, MediaType.VIDEO, MediaType.AUDIO, MediaType.TEXT, MediaType.MIXED],
+    appliesTo: [MediaType.IMAGE, MediaType.VIDEO, MediaType.AUDIO],
     criteriaCodes: [...COMMON_CRITERIA],
-  },
-  {
-    id: "publication",
-    appliesTo: [MediaType.IMAGE, MediaType.VIDEO, MediaType.AUDIO, MediaType.TEXT, MediaType.MIXED],
-    criteriaCodes: ["METADATA_QUALITY", "PUBLICATION_RULES", "DUPLICATION"],
   },
   {
     id: "image_quality",
@@ -45,7 +39,6 @@ export const CHECK_TEMPLATE_PRESETS: CheckTemplatePreset[] = [
       "VIDEO_DURATION",
       "VIDEO_RESOLUTION_BITRATE",
       "VIDEO_FRAME_INTEGRITY",
-      "VIDEO_SHARPNESS",
       "VIDEO_BLACK_SCREEN",
     ],
   },
@@ -59,18 +52,6 @@ export const CHECK_TEMPLATE_PRESETS: CheckTemplatePreset[] = [
       "AUDIO_NOISE",
       "AUDIO_SILENCE",
       "AUDIO_INTELLIGIBILITY_PROXY",
-    ],
-  },
-  {
-    id: "text_quality",
-    appliesTo: [MediaType.TEXT],
-    criteriaCodes: [
-      ...COMMON_CRITERIA,
-      "TEXT_SPELLING_PROXY",
-      "TEXT_FORBIDDEN_LEXICON",
-      "TEXT_LENGTH",
-      "TEXT_TEMPLATE",
-      "TEXT_READABILITY",
     ],
   },
 ];

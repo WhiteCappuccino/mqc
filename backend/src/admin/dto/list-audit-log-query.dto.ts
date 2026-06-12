@@ -16,5 +16,14 @@ export class ListAuditLogQueryDto {
   @IsOptional()
   @IsString()
   entityType?: string;
-}
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dateTo?: string;
+}

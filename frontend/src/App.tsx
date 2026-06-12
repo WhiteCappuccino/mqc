@@ -1,10 +1,11 @@
 import { ThemeProvider } from "@mui/material";
 import CssBaseline from "@mui/material/CssBaseline";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/auth-context";
 import { AppShell } from "./components/app-shell";
 import { ProtectedRoute } from "./components/protected-route";
+import { AdminCheckTemplatesPage } from "./pages/admin-check-templates-page";
 import { AdminPage } from "./pages/admin-page";
 import { CollectionsPage } from "./pages/collections-page";
 import { DashboardPage } from "./pages/dashboard-page";
@@ -21,7 +22,6 @@ import { ResetPasswordPage } from "./pages/reset-password-page";
 import { UploadPage } from "./pages/upload-page";
 import { VerifyEmailPage } from "./pages/verify-email-page";
 import { createAppTheme } from "./theme/app-theme";
-import { useEffect } from "react";
 import {
   UI_PREFERENCES_STORAGE_KEY,
   defaultUiPreferences,
@@ -138,6 +138,14 @@ function App() {
                 element={
                   <ProtectedRoute roles={["ADMIN"]}>
                     <AdminPage language={preferences.language} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/check-templates"
+                element={
+                  <ProtectedRoute roles={["ADMIN"]}>
+                    <AdminCheckTemplatesPage language={preferences.language} />
                   </ProtectedRoute>
                 }
               />

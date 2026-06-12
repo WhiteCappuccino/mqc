@@ -18,6 +18,7 @@ import { useAuth } from "../auth/auth-context";
 import {
   formatAccessLevel,
   formatCheckStatus,
+  formatDateTime,
   formatMediaStatus,
   formatMediaType,
   formatSeverity,
@@ -430,7 +431,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
             {item.qualityChecks?.length ? (
               item.qualityChecks.map((analysis) => (
                 <Typography key={analysis.id} variant="body2">
-                  v{analysis.mediaVersion ?? item.version ?? 1} | {new Date(analysis.createdAt).toLocaleString()} |{" "}
+                  v{analysis.mediaVersion ?? item.version ?? 1} | {formatDateTime(analysis.createdAt, language)} |{" "}
                   {t.status ?? "status"}={formatCheckStatus(analysis.status, language)} |{" "}
                   {t.score ?? "score"}={analysis.finalScore}
                 </Typography>
@@ -569,7 +570,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
             {(item.revisions ?? []).map((revision) => (
               <Typography key={revision.id} variant="body2">
                 {t.version} {revision.version} | {revision.fileName} | {formatMediaStatus(revision.status, language)} |{" "}
-                {new Date(revision.createdAt).toLocaleString()}
+                {formatDateTime(revision.createdAt, language)}
               </Typography>
             ))}
             {!(item.revisions ?? []).length && (
@@ -587,7 +588,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
           <Stack spacing={1}>
             {auditLogs.map((log) => (
               <Typography key={log.id} variant="body2">
-                {new Date(log.createdAt).toLocaleString()} | {log.action} |{" "}
+                {formatDateTime(log.createdAt, language)} | {log.action} |{" "}
                 {log.actor?.fullName ?? log.actor?.username ?? t.system}
               </Typography>
             ))}
@@ -608,7 +609,7 @@ export function MediaDetailsPage({ language }: MediaDetailsPageProps) {
                   <Typography variant="body2">{comment.text}</Typography>
                   <Typography variant="caption" color="text.secondary">
                     {comment.author?.fullName ?? comment.author?.username ?? comment.authorId} |{" "}
-                    {new Date(comment.createdAt).toLocaleString()}
+                    {formatDateTime(comment.createdAt, language)}
                   </Typography>
                 </CardContent>
                 <CardActions>

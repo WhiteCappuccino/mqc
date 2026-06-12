@@ -39,11 +39,26 @@ export class ReportsService {
       owner: item.owner.email,
       sizeBytes: item.sizeBytes,
       score: item.qualityChecks[0]?.finalScore ?? null,
-      createdAt: item.createdAt.toISOString(),
+      createdAt: this.formatDateRu(item.createdAt),
     }));
 
     if (format === "csv") {
-      return Buffer.from(stringify(rows, { header: true }), "utf-8");
+      return Buffer.from(
+        stringify(rows, {
+          header: true,
+          columns: [
+            { key: "id", header: "ID" },
+            { key: "title", header: "Название" },
+            { key: "type", header: "Тип" },
+            { key: "status", header: "Статус" },
+            { key: "owner", header: "Владелец" },
+            { key: "sizeBytes", header: "Размер" },
+            { key: "score", header: "Оценка" },
+            { key: "createdAt", header: "Дата создания" },
+          ],
+        }),
+        "utf-8",
+      );
     }
 
     if (format === "xlsx") {
@@ -65,7 +80,7 @@ export class ReportsService {
       { header: "Owner", key: "owner", width: 24 },
       { header: "Size", key: "sizeBytes", width: 12 },
       { header: "Score", key: "score", width: 10 },
-      { header: "Created At", key: "createdAt", width: 24 },
+      { header: "Дата создания", key: "createdAt", width: 24 },
     ];
 
     rows.forEach((row) => sheet.addRow(row));
@@ -83,17 +98,27 @@ export class ReportsService {
       document.on("end", () => resolve(Buffer.concat(chunks)));
       document.on("error", reject);
 
-      document.fontSize(16).text("Media Quality Report");
+      document.fontSize(16).text("Отчет по качеству медиа");
       document.moveDown();
       document.fontSize(9);
 
       for (const row of rows) {
         document.text(
-          `${row.title} | type=${row.type} | status=${row.status} | owner=${row.owner} | score=${row.score ?? "n/a"}`,
+          `${row.title} | тип=${row.type} | статус=${row.status} | владелец=${row.owner} | оценка=${row.score ?? "н/д"} | дата=${row.createdAt}`,
         );
       }
 
       document.end();
     });
+  }
+
+  private formatDateRu(value: Date) {
+    return new Intl.DateTimeFormat("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(value);
   }
 }

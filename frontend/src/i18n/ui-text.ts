@@ -140,6 +140,101 @@ const notificationChannelLabels: Record<UiLanguage, Record<"IN_APP" | "EMAIL", s
   },
 };
 
+const criterionLabels = {
+  TECHNICAL_REQUIREMENTS: {
+    en: "Technical requirements",
+    ru: "Технические требования",
+  },
+  METADATA_QUALITY: {
+    en: "Metadata quality",
+    ru: "Качество метаданных",
+  },
+  DUPLICATION: {
+    en: "Duplication",
+    ru: "Проверка на дубликаты",
+  },
+  IMAGE_RESOLUTION: {
+    en: "Image resolution",
+    ru: "Разрешение изображения",
+  },
+  IMAGE_SHARPNESS: {
+    en: "Image sharpness",
+    ru: "Резкость изображения",
+  },
+  IMAGE_NOISE: {
+    en: "Image noise",
+    ru: "Шум изображения",
+  },
+  IMAGE_BRIGHTNESS_CONTRAST: {
+    en: "Image brightness and contrast",
+    ru: "Яркость и контраст изображения",
+  },
+  IMAGE_INTEGRITY: {
+    en: "Image integrity",
+    ru: "Целостность изображения",
+  },
+  IMAGE_FORMAT: {
+    en: "Image format",
+    ru: "Формат изображения",
+  },
+  VIDEO_DURATION: {
+    en: "Video duration",
+    ru: "Длительность видео",
+  },
+  VIDEO_RESOLUTION_BITRATE: {
+    en: "Video resolution and bitrate",
+    ru: "Разрешение и битрейт видео",
+  },
+  VIDEO_FRAME_INTEGRITY: {
+    en: "Video frame integrity",
+    ru: "Целостность кадров видео",
+  },
+  VIDEO_BLACK_SCREEN: {
+    en: "Black frames",
+    ru: "Черные кадры",
+  },
+  AUDIO_DURATION: {
+    en: "Audio duration",
+    ru: "Длительность аудио",
+  },
+  AUDIO_LOUDNESS: {
+    en: "Audio loudness",
+    ru: "Громкость аудио",
+  },
+  AUDIO_NOISE: {
+    en: "Audio noise",
+    ru: "Шум аудио",
+  },
+  AUDIO_SILENCE: {
+    en: "Audio silence",
+    ru: "Тишина в аудио",
+  },
+  AUDIO_INTELLIGIBILITY_PROXY: {
+    en: "Audio intelligibility",
+    ru: "Разборчивость аудио",
+  },
+  TEXT_SPELLING_PROXY: {
+    en: "Text structure and spelling",
+    ru: "Структура и орфография текста",
+  },
+  TEXT_FORBIDDEN_LEXICON: {
+    en: "Forbidden lexicon",
+    ru: "Запрещенная лексика",
+  },
+  TEXT_LENGTH: {
+    en: "Text length",
+    ru: "Длина текста",
+  },
+  TEXT_TEMPLATE: {
+    en: "Text template",
+    ru: "Шаблон текста",
+  },
+  TEXT_READABILITY: {
+    en: "Text readability",
+    ru: "Читаемость текста",
+  },
+} as const;
+
 const violationLabels = {
   FILE_DOWNLOAD_FAILED: {
     en: "File download failed",
@@ -300,6 +395,70 @@ const violationLabels = {
   TEMPLATE_MISMATCH: {
     en: "Template mismatch",
     ru: "Несоответствие шаблону",
+  },
+  TEMPLATE_RENDER_NOT_FOUND: {
+    en: "Render rule not found",
+    ru: "Рендер шаблона не найден",
+  },
+  TEMPLATE_VIDEO_WIDTH_MISMATCH: {
+    en: "Video width mismatch",
+    ru: "Несовпадение ширины видео",
+  },
+  TEMPLATE_VIDEO_HEIGHT_MISMATCH: {
+    en: "Video height mismatch",
+    ru: "Несовпадение высоты видео",
+  },
+  TEMPLATE_VIDEO_FPS_MISMATCH: {
+    en: "Video FPS mismatch",
+    ru: "Несовпадение FPS видео",
+  },
+  TEMPLATE_VIDEO_BITRATE_MISMATCH: {
+    en: "Video bitrate mismatch",
+    ru: "Несовпадение битрейта видео",
+  },
+  TEMPLATE_VIDEO_DURATION_MIN_MISMATCH: {
+    en: "Video shorter than required",
+    ru: "Видео короче требуемого",
+  },
+  TEMPLATE_VIDEO_DURATION_MAX_MISMATCH: {
+    en: "Video longer than required",
+    ru: "Видео длиннее требуемого",
+  },
+  TEMPLATE_VIDEO_CONTAINER_MISMATCH: {
+    en: "Video container mismatch",
+    ru: "Несовпадение контейнера видео",
+  },
+  TEMPLATE_VIDEO_CODEC_MISMATCH: {
+    en: "Video codec mismatch",
+    ru: "Несовпадение видеокодека",
+  },
+  TEMPLATE_IMAGE_WIDTH_MISMATCH: {
+    en: "Image width mismatch",
+    ru: "Несовпадение ширины изображения",
+  },
+  TEMPLATE_IMAGE_HEIGHT_MISMATCH: {
+    en: "Image height mismatch",
+    ru: "Несовпадение высоты изображения",
+  },
+  TEMPLATE_FILE_SIZE_MISMATCH: {
+    en: "File size mismatch",
+    ru: "Несовпадение размера файла",
+  },
+  TEMPLATE_VIDEO_BITRATE_MIN_MISMATCH: {
+    en: "Video bitrate below minimum",
+    ru: "Битрейт видео ниже минимального",
+  },
+  TEMPLATE_VIDEO_BITRATE_MAX_MISMATCH: {
+    en: "Video bitrate above maximum",
+    ru: "Битрейт видео выше максимального",
+  },
+  TEMPLATE_AUDIO_PRESENCE_MISMATCH: {
+    en: "Audio presence mismatch",
+    ru: "Несовпадение наличия аудио",
+  },
+  TEMPLATE_AUDIO_CODEC_MISMATCH: {
+    en: "Audio codec mismatch",
+    ru: "Несовпадение аудиокодека",
   },
 } as const;
 
@@ -464,6 +623,70 @@ const violationDescriptions = {
     en: "The text does not match the expected template.",
     ru: "Текст не соответствует ожидаемому шаблону.",
   },
+  TEMPLATE_RENDER_NOT_FOUND: {
+    en: "The file name does not match any render rule in the template.",
+    ru: "Имя файла не совпало ни с одним рендером шаблона.",
+  },
+  TEMPLATE_VIDEO_WIDTH_MISMATCH: {
+    en: "Video width does not match the selected render rule.",
+    ru: "Ширина видео не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_VIDEO_HEIGHT_MISMATCH: {
+    en: "Video height does not match the selected render rule.",
+    ru: "Высота видео не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_VIDEO_FPS_MISMATCH: {
+    en: "Video FPS does not match the selected render rule.",
+    ru: "FPS видео не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_VIDEO_BITRATE_MISMATCH: {
+    en: "Video bitrate does not match the selected render rule.",
+    ru: "Битрейт видео не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_VIDEO_DURATION_MIN_MISMATCH: {
+    en: "Video is shorter than the selected render rule requires.",
+    ru: "Видео короче, чем требует выбранный рендер.",
+  },
+  TEMPLATE_VIDEO_DURATION_MAX_MISMATCH: {
+    en: "Video is longer than the selected render rule allows.",
+    ru: "Видео длиннее, чем допускает выбранный рендер.",
+  },
+  TEMPLATE_VIDEO_CONTAINER_MISMATCH: {
+    en: "Video container does not match the selected render rule.",
+    ru: "Контейнер видео не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_VIDEO_CODEC_MISMATCH: {
+    en: "Video codec does not match the selected render rule.",
+    ru: "Видеокодек не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_IMAGE_WIDTH_MISMATCH: {
+    en: "Image width does not match the selected render rule.",
+    ru: "Ширина изображения не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_IMAGE_HEIGHT_MISMATCH: {
+    en: "Image height does not match the selected render rule.",
+    ru: "Высота изображения не соответствует выбранному рендеру.",
+  },
+  TEMPLATE_FILE_SIZE_MISMATCH: {
+    en: "File size exceeds the template limit.",
+    ru: "Размер файла превышает лимит шаблона.",
+  },
+  TEMPLATE_VIDEO_BITRATE_MIN_MISMATCH: {
+    en: "Video bitrate is below the template minimum.",
+    ru: "Битрейт видео ниже минимума шаблона.",
+  },
+  TEMPLATE_VIDEO_BITRATE_MAX_MISMATCH: {
+    en: "Video bitrate is above the template maximum.",
+    ru: "Битрейт видео выше максимума шаблона.",
+  },
+  TEMPLATE_AUDIO_PRESENCE_MISMATCH: {
+    en: "Audio presence does not match the template requirement.",
+    ru: "Наличие аудио не соответствует требованию шаблона.",
+  },
+  TEMPLATE_AUDIO_CODEC_MISMATCH: {
+    en: "Audio codec does not match the template requirement.",
+    ru: "Аудиокодек не соответствует требованию шаблона.",
+  },
 } as const;
 
 const errorDictionary = {
@@ -539,6 +762,24 @@ export function formatMediaType(value: MediaType, language: UiLanguage) {
   return mediaTypeLabels[language][value];
 }
 
+export function formatDate(value: string | Date, language: UiLanguage) {
+  return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : "en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+export function formatDateTime(value: string | Date, language: UiLanguage) {
+  return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : "en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export function formatMediaStatus(value: MediaStatus, language: UiLanguage) {
   return mediaStatusLabels[language][value];
 }
@@ -571,6 +812,11 @@ export function formatModerationStatus(
 
 export function formatNotificationChannel(value: "IN_APP" | "EMAIL", language: UiLanguage) {
   return notificationChannelLabels[language][value];
+}
+
+export function formatCriterionCode(value: string, language: UiLanguage) {
+  const localized = criterionLabels[value as keyof typeof criterionLabels];
+  return localized?.[language] ?? value;
 }
 
 export function formatNotificationTitle(

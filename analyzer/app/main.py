@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import io
+import json
 import math
 import re
 import statistics
+import subprocess
 import tempfile
 from datetime import datetime, timezone
 from enum import Enum
@@ -291,6 +293,7 @@ def _run_video_checks(
         temp_file.write(file_bytes)
         temp_file.flush()
         capture = cv2.VideoCapture(temp_file.name)
+        ffprobe_info = _probe_video_streams(temp_file.name)
 
         if not capture.isOpened():
             return _add_violation(
@@ -303,6 +306,9 @@ def _run_video_checks(
         height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         duration = frame_count / fps if fps > 0 else 0
         bitrate = (payload.sizeBytes * 8) / duration if duration > 0 else 0
+        fourcc_raw = int(capture.get(cv2.CAP_PROP_FOURCC) or 0)
+        fourcc = "".join(chr((fourcc_raw >> 8 * index) & 0xFF) for index in range(4)).strip().upper()
+        container = Path(payload.fileName).suffix.replace(".", "").lower()
 
         details["videoMetrics"] = {
             "fps": round(fps, 3),
@@ -311,6 +317,10 @@ def _run_video_checks(
             "width": width,
             "height": height,
             "estimatedBitrate": int(bitrate),
+            "codec": ffprobe_info.get("videoCodec") or fourcc,
+            "container": container,
+            "hasAudio": ffprobe_info.get("hasAudio", False),
+            "audioCodec": ffprobe_info.get("audioCodec"),
             "audioNote": "Audio quality checks for video are limited in this analyzer build",
         }
 
@@ -593,6 +603,36 @@ def _fetch_file_bytes(url: str) -> bytes | None:
         return response.content
     except Exception:
         return None
+
+
+def _probe_video_streams(file_path: str) -> dict[str, Any]:
+    try:
+        process = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type,codec_name",
+                "-of",
+                "json",
+                file_path,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        payload = json.loads(process.stdout or "{}")
+        streams = payload.get("streams", [])
+        video_stream = next((stream for stream in streams if stream.get("codec_type") == "video"), None)
+        audio_stream = next((stream for stream in streams if stream.get("codec_type") == "audio"), None)
+        return {
+            "videoCodec": (video_stream or {}).get("codec_name", ""),
+            "audioCodec": (audio_stream or {}).get("codec_name", ""),
+            "hasAudio": audio_stream is not None,
+        }
+    except Exception:
+        return {"videoCodec": "", "audioCodec": "", "hasAudio": False}
 
 
 def _add_violation(

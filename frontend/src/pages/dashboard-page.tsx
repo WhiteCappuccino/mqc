@@ -27,12 +27,14 @@ import { Link as RouterLink } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/auth-context";
 import {
+  formatDate,
   formatMediaStatus,
   formatMediaType,
   formatSeverity,
   normalizeAppError,
 } from "../i18n/ui-text";
 import {
+  getCustomCheckTemplates,
   getCheckTemplateMeta,
   getCheckTemplateUiCopy,
   getDefaultTemplateId,
@@ -43,7 +45,7 @@ import {
 } from "../check/check-templates";
 import type { MediaItem, MediaStatus, MediaType, ViolationSeverity } from "../types/domain";
 
-const mediaTypes: Array<MediaType | ""> = ["", "IMAGE", "VIDEO", "AUDIO", "TEXT", "MIXED"];
+const mediaTypes: Array<MediaType | ""> = ["", "IMAGE", "VIDEO", "AUDIO"];
 const mediaStatuses: Array<MediaStatus | ""> = [
   "",
   "UPLOADED",
@@ -228,9 +230,12 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
       if (!token) return;
       try {
         const response = await api.listCheckTemplates(token);
-        setTemplates(response);
+        setTemplates([
+          ...(response as CheckTemplate[]).map((template) => ({ ...template, source: "system" as const })),
+          ...getCustomCheckTemplates(),
+        ]);
       } catch {
-        setTemplates([]);
+        setTemplates(getCustomCheckTemplates());
       }
     }
 
@@ -239,7 +244,12 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
 
   async function runAnalysis(
     id: string,
-    options?: { templateId?: string; criteriaCodes?: string[] },
+    options?: {
+      templateId?: string;
+      criteriaCodes?: string[];
+      profileRequirements?: CheckTemplate["profileRequirements"];
+      renderRules?: CheckTemplate["renderRules"];
+    },
   ) {
     if (!token) return;
     setBusyId(id);
@@ -314,12 +324,14 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
     await runAnalysis(templateDialogMedia.id, {
       templateId: template.id,
       criteriaCodes: template.criteriaCodes,
+      profileRequirements: template.profileRequirements,
+      renderRules: template.renderRules,
     });
   }
 
   const visibleTemplates = templates.filter((template) => {
     const matchesSearch = (() => {
-      const meta = getCheckTemplateMeta(template.id, language);
+      const meta = getCheckTemplateMeta(template, language);
       const haystack = `${meta.name} ${meta.description}`.toLowerCase();
       return haystack.includes(templateSearch.trim().toLowerCase());
     })();
@@ -693,7 +705,7 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
                         {t.created}
                       </Typography>
                       <Typography color="text.secondary">
-                        {new Date(item.createdAt).toLocaleDateString()}
+                        {formatDate(item.createdAt, language)}
                       </Typography>
                     </Box>
                     <Box>
@@ -766,7 +778,7 @@ export function DashboardPage({ language, hideHero }: DashboardPageProps) {
             </Stack>
             <Stack spacing={1.5}>
               {visibleTemplates.map((template) => {
-                const meta = getCheckTemplateMeta(template.id, language);
+                const meta = getCheckTemplateMeta(template, language);
                 const isFavorite = favoriteTemplateIds.includes(template.id);
                 const isDefault = defaultTemplateId === template.id;
                 const isSelected = selectedTemplateId === template.id;
